@@ -58,6 +58,9 @@ You are activating the resume-validator skill. Follow its instructions exactly.
 
 Respond with a single JSON object matching the output format defined in the skill.
 No prose before or after the JSON.
+
+## Output Constraints
+- `original_text` must always be a non-empty string. If you cannot locate the exact original text, use the string "NOT FOUND IN ORIGINAL" — never null, never omit the field.
 """
 
 # ---------------------------------------------------------------------------

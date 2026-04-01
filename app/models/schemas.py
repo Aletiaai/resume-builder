@@ -113,7 +113,7 @@ class ValidationFinding(BaseModel):
     severity: str  # CRITICAL | WARNING
     section: str
     pattern: str
-    original_text: str
+    original_text: Optional[str] = ""
     flagged_text: str
     explanation: str
     repair_instruction: str
