@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - ./app:/home/app/resume-builder/app
+      - ./frontend:/home/app/resume-builder/frontend
+      - ./logs:/home/app/resume-builder/logs
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload

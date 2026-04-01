@@ -1,0 +1,293 @@
+# Resume Formatting Specification
+
+This file defines the exact visual formatting for all resume .docx files produced by this skill.
+Extracted from Marco García's resume as the canonical template.
+
+---
+
+## Page Setup
+
+```javascript
+sections: [{
+  properties: {
+    page: {
+      size: {
+        width: 12240,   // 8.5 inches — US Letter
+        height: 15840   // 11 inches — US Letter
+      },
+      margin: {
+        top: 720,       // 0.5 inch
+        bottom: 720,    // 0.5 inch
+        left: 900,      // 0.625 inch
+        right: 900      // 0.625 inch
+      }
+    }
+  }
+}]
+```
+
+---
+
+## Fonts & Sizes
+
+| Element | Font | Size | Style |
+|---------|------|------|-------|
+| Candidate Name | Arial | 16pt (32 half-pts) | Bold |
+| Contact line | Arial | 9pt (18 half-pts) | Regular |
+| Section headers | Arial | 11pt (22 half-pts) | Bold, ALL CAPS |
+| Job title line | Arial | 10pt (20 half-pts) | Bold |
+| Body / bullets | Arial | 10pt (20 half-pts) | Regular |
+| Education entries | Arial | 10pt (20 half-pts) | Regular |
+| Languages line | Arial | 10pt (20 half-pts) | Regular |
+
+---
+
+## Colors
+
+| Element | Color |
+|---------|-------|
+| All text | Near-black (`111111`) — matches Google Docs default |
+| Section header border line | Dark gray (`404040`) |
+| No accent colors | — |
+
+---
+
+## Spacing
+
+| Element | Spacing |
+|---------|---------|
+| After Name | 0 pt (tight) |
+| After contact line | 80 DXA (~56pt) |
+| Before each section header | 120 DXA |
+| After each section header | 60 DXA |
+| Between job entries | 80 DXA |
+| Between bullet points | 0 (single spacing) |
+| Line spacing | single (auto) |
+
+---
+
+## Section Headers
+
+Section headers use **NO border lines** — plain bold text only. This ensures ATS (Applicant Tracking System) compatibility.
+
+```javascript
+new Paragraph({
+  spacing: { before: 140, after: 60 },
+  children: [
+    new TextRun({
+      text: "RELEVANT WORK EXPERIENCE",
+      bold: true,
+      size: 22,       // 11pt
+      font: "Arial",
+      color: "111111"
+    })
+  ]
+})
+```
+
+**NEVER add bottom borders to section headers** — they reduce ATS readability.
+**NEVER use a Table as a section divider.**
+
+---
+
+## Header (Name + Contact)
+
+```javascript
+// Name
+new Paragraph({
+  alignment: AlignmentType.CENTER,
+  spacing: { after: 0 },
+  children: [
+    new TextRun({
+      text: "Marco García",
+      bold: true,
+      size: 32,       // 16pt
+      font: "Arial"
+    })
+  ]
+}),
+
+// Contact line
+new Paragraph({
+  alignment: AlignmentType.CENTER,
+  spacing: { after: 80 },
+  children: [
+    new TextRun({
+      text: "Mexico City, C.P. 11820 | +(52) 5611652690 | marko.garcia@gmail.com | https://www.linkedin.com/in/marcogmtz/",
+      size: 18,       // 9pt
+      font: "Arial"
+    })
+  ]
+})
+```
+
+---
+
+## Job Entry Title Line (Company | Title + Right-aligned Date)
+
+Use tab stops to right-align the date on the same line as company/title:
+
+```javascript
+new Paragraph({
+  tabStops: [
+    { type: TabStopType.RIGHT, position: 9360 }  // Right edge of content area
+  ],
+  spacing: { before: 80, after: 0 },
+  children: [
+    new TextRun({
+      text: "Aletia | AI Product Manager/GenAI Engineer",
+      bold: true,
+      size: 20,
+      font: "Arial"
+    }),
+    new TextRun({
+      text: "\tAug 2020 – Current",
+      bold: true,
+      size: 20,
+      font: "Arial"
+    })
+  ]
+})
+```
+
+---
+
+## Bullet Points
+
+**NEVER use unicode bullets.** Always use docx numbering config:
+
+```javascript
+// In Document constructor:
+numbering: {
+  config: [
+    {
+      reference: "resume-bullets",
+      levels: [{
+        level: 0,
+        format: LevelFormat.BULLET,
+        text: "•",
+        alignment: AlignmentType.LEFT,
+        style: {
+          paragraph: {
+            indent: { left: 360, hanging: 180 }
+          }
+        }
+      }]
+    }
+  ]
+}
+
+// Each bullet:
+new Paragraph({
+  numbering: { reference: "resume-bullets", level: 0 },
+  spacing: { before: 0, after: 0 },
+  children: [
+    new TextRun({
+      text: "Led enterprise discovery meetings, translating client problems into AI solutions, achieving 60% follow-up rate.",
+      size: 20,
+      font: "Arial"
+    })
+  ]
+})
+```
+
+---
+
+## Education Entries
+
+Each entry is a single paragraph, no bullets:
+
+```javascript
+new Paragraph({
+  spacing: { before: 0, after: 0 },
+  children: [
+    new TextRun({
+      text: "Machine Learning Operations Fundamentals | Google | Sep 2025",
+      size: 20,
+      font: "Arial"
+    })
+  ]
+})
+```
+
+---
+
+## Languages Line
+
+Single paragraph, inline:
+
+```javascript
+new Paragraph({
+  spacing: { before: 0, after: 0 },
+  children: [
+    new TextRun({
+      text: "English C1 (Fluent - Speaking & Writing)",
+      bold: true,
+      size: 20,
+      font: "Arial"
+    }),
+    new TextRun({
+      text: " | Spanish (Native) | French (Basic)",
+      size: 20,
+      font: "Arial"
+    })
+  ]
+})
+```
+
+---
+
+## Full Document Generation Notes
+
+This skill is used inside a Python FastAPI app. The document is generated by `docx_service.py` using the `python-docx` library — NOT the JavaScript `docx` npm package.
+
+The JavaScript code examples below are kept as formatting references to understand the intended structure and spacing. `docx_service.py` implements the same spec using python-docx equivalents:
+
+| JavaScript (docx npm) | Python (python-docx) |
+|----------------------|---------------------|
+| `TextRun({ bold: true, size: 32 })` | `run.bold = True; run.font.size = Pt(16)` |
+| `AlignmentType.CENTER` | `WD_ALIGN_PARAGRAPH.CENTER` |
+| `AlignmentType.JUSTIFY` | `WD_ALIGN_PARAGRAPH.JUSTIFY` |
+| `TabStopType.RIGHT` | `TabStop(Pt(X), WD_TAB_ALIGNMENT.RIGHT)` |
+| `LevelFormat.BULLET` | `paragraph.style = 'List Bullet'` |
+| `spacing: { before: 80 }` | `paragraph.paragraph_format.space_before = Pt(X)` |
+
+The generated document is returned as bytes and stored in Supabase Storage — not saved to a local path.
+
+---
+
+
+## Output File Naming Convention (English versions)
+
+**Pattern:** `FirstName-LastName-resume-MonYY-CO.docx`
+
+| Component | Rule | Example |
+|-----------|------|---------|
+| First + Last name | Capitalized, hyphen-separated | `Marco-Garcia` |
+| Month | 3-letter abbreviation, capitalized | `Mar`, `Apr`, `Jan` |
+| Year | 2-digit year | `26`, `27` |
+| Company code | First 2 letters of target company name, capitalized | `Go` for Google, `An` for Anthropic |
+
+**Full examples:**
+- Applying to Google in March 2026 → `Marco-Garcia-resume-Mar26-Go.docx`
+- Applying to Anthropic in November 2027 → `Marco-Garcia-resume-Nov27-An.docx`
+- Applying to OpenAI in January 2026 → `Marco-Garcia-resume-Jan26-Op.docx`
+
+
+---
+
+## Output File Naming Convention (Spanish versions)
+
+**Pattern:** `FirstName-LastName-CV-MonYY-CO.docx`
+
+| Component | Rule | Example |
+|-----------|------|---------|
+| First + Last name | Capitalized, hyphen-separated | `Marco-Garcia` |
+| Month | 3-letter abbreviation in Spanish, capitalized | `Mar`, `Abr`, `Ene` |
+| Year | 2-digit year | `26`, `27` |
+| Company code | First 2 letters of target company name, capitalized | `Go` for Google, `An` for Anthropic |
+
+**Full examples:**
+- Applying to Google in March 2026 → `Marco-Garcia-CV-Mar26-Go.docx`
+- Applying to Anthropic in April 2027 → `Marco-Garcia-CV-Abr27-An.docx`
+- Applying to OpenAI in January 2026 → `Marco-Garcia-CV-Ene26-Op.docx`

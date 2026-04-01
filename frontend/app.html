@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CurrículumIA — App</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="app-body">
+
+  <!-- ── APP SHELL ── -->
+  <nav class="app-nav">
+    <a href="/" class="logo">CurrículumIA</a>
+    <div class="nav-right">
+      <span id="user-email" class="user-email"></span>
+      <button id="btn-logout" class="btn btn-sm btn-outline">Cerrar sesión</button>
+    </div>
+  </nav>
+
+  <main class="app-main">
+
+    <!-- ══════════════════════════════════════════
+         SCREEN 0: Auth (login / register)
+    ═══════════════════════════════════════════ -->
+    <section id="screen-auth" class="screen active">
+      <div class="card auth-card">
+
+        <div id="auth-tabs" class="tabs">
+          <button class="tab active" data-tab="login">Iniciar sesión</button>
+          <button class="tab" data-tab="register">Registrarse</button>
+        </div>
+
+        <!-- Login form -->
+        <div id="tab-login" class="tab-panel active">
+          <h2>Bienvenido de vuelta</h2>
+          <form id="form-login">
+            <label>Correo electrónico
+              <input type="email" id="login-email" required autocomplete="email" />
+            </label>
+            <label>Contraseña
+              <input type="password" id="login-password" required autocomplete="current-password" />
+            </label>
+            <button type="submit" class="btn btn-primary btn-full">Iniciar sesión</button>
+          </form>
+          <p id="login-error" class="form-error hidden"></p>
+        </div>
+
+        <!-- Register form -->
+        <div id="tab-register" class="tab-panel hidden">
+          <h2>Crear cuenta</h2>
+          <form id="form-register">
+            <label>Correo electrónico
+              <input type="email" id="reg-email" required autocomplete="email" />
+            </label>
+            <label>Contraseña <span class="hint">(mínimo 8 caracteres)</span>
+              <input type="password" id="reg-password" required autocomplete="new-password" />
+            </label>
+            <button type="submit" class="btn btn-primary btn-full">Crear cuenta gratis</button>
+          </form>
+          <p id="reg-error" class="form-error hidden"></p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════
+         SCREEN 1: Gemini API key onboarding
+    ═══════════════════════════════════════════ -->
+    <section id="screen-gemini" class="screen hidden">
+      <div class="card gemini-card">
+        <h2>Configura tu API key de Gemini</h2>
+        <p class="section-desc">
+          CurrículumIA usa la IA de Google Gemini para generar tu currículum.
+          Necesitas tu propia API key — es gratis y tarda menos de 2 minutos.
+        </p>
+
+        <ol class="gemini-steps">
+          <li>Ve a Google AI Studio: <a href="https://aistudio.google.com" target="_blank" rel="noopener">aistudio.google.com</a></li>
+          <li>Inicia sesión con tu cuenta de Google</li>
+          <li>Haz clic en <strong>"Get API Key"</strong> → <strong>"Create API key"</strong></li>
+          <li>
+            Copia tu API key y pégala aquí:
+            <input
+              type="text"
+              id="gemini-key-input"
+              placeholder="AIza..."
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </li>
+        </ol>
+
+        <button id="btn-save-key" class="btn btn-primary">Guardar mi API key</button>
+        <p id="gemini-error" class="form-error hidden"></p>
+        <p class="gemini-note">
+          Tu API key se almacena de forma segura y nunca se comparte.
+          La capa gratuita de Gemini es suficiente para generar varios currículums al día.
+        </p>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════
+         SCREEN 2: Upload base resume
+    ═══════════════════════════════════════════ -->
+    <section id="screen-upload" class="screen hidden">
+      <div class="card">
+        <h2>Sube tu currículum base</h2>
+        <p class="section-desc">
+          Solo necesitas hacer esto una vez. Sube tu CV actual en formato Word (.docx).
+        </p>
+
+        <div class="upload-area" id="upload-drop-zone">
+          <input type="file" id="resume-file" accept=".docx" class="file-input" />
+          <label for="resume-file" class="upload-label">
+            <span class="upload-icon">📄</span>
+            <span id="upload-label-text">Haz clic para seleccionar tu CV (.docx)</span>
+          </label>
+        </div>
+
+        <button id="btn-upload" class="btn btn-primary" disabled>Subir currículum</button>
+        <p id="upload-error" class="form-error hidden"></p>
+        <p id="upload-success" class="form-success hidden"></p>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════
+         SCREEN 3: Generate — paste job description
+    ═══════════════════════════════════════════ -->
+    <section id="screen-generate" class="screen hidden">
+      <div class="card">
+        <h2>Genera tu currículum</h2>
+        <p class="section-desc">
+          Pega la descripción del puesto al que quieres aplicar.
+          La IA adaptará tu CV a esa vacante específica.
+        </p>
+
+        <label for="job-desc">Descripción del puesto
+          <textarea
+            id="job-desc"
+            rows="12"
+            placeholder="Pega aquí la descripción completa de la vacante..."
+          ></textarea>
+        </label>
+
+        <div id="resume-file-info" class="file-info hidden">
+          <span id="resume-file-name"></span>
+          <button id="btn-change-resume" class="btn btn-sm btn-outline">Cambiar CV</button>
+        </div>
+
+        <button id="btn-generate" class="btn btn-primary btn-lg">Generar currículum</button>
+        <p id="generate-error" class="form-error hidden"></p>
+
+        <!-- Loading state -->
+        <div id="generating-spinner" class="spinner-container hidden">
+          <div class="spinner"></div>
+          <p>Generando tu currículum… esto puede tardar hasta 30 segundos.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════
+         SCREEN 4: Result — download
+    ═══════════════════════════════════════════ -->
+    <section id="screen-result" class="screen hidden">
+      <div class="card result-card">
+        <div class="result-icon">✅</div>
+        <h2>¡Tu currículum está listo!</h2>
+
+        <!-- Flagged sections warning banner -->
+        <div id="flagged-banner" class="alert alert-warning hidden">
+          <strong>Atención:</strong>
+          No pudimos verificar <span id="flagged-count"></span> sección(es) de tu currículum.
+          Están marcadas en rojo en el documento. Revísalas antes de enviarlo al reclutador.
+        </div>
+
+        <a id="download-link" href="#" class="btn btn-primary btn-lg" download>
+          Descargar currículum (.docx)
+        </a>
+
+        <button id="btn-new-generation" class="btn btn-outline">Generar otro</button>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════
+         SCREEN 5: Paywall
+    ═══════════════════════════════════════════ -->
+    <section id="screen-paywall" class="screen hidden">
+      <div class="card paywall-card">
+        <h2>¡Prueba completada!</h2>
+        <p>
+          Ya usaste tu currículum gratuito. Suscríbete al plan Básico para
+          generar currículums ilimitados.
+        </p>
+
+        <div class="paywall-price">
+          <span class="price">$9</span><span class="period">/mes</span>
+        </div>
+
+        <ul class="paywall-features">
+          <li>✓ Currículums ilimitados</li>
+          <li>✓ Validación anti-alucinaciones</li>
+          <li>✓ Descarga en Word (.docx)</li>
+          <li>✓ Usa tu API key de Gemini</li>
+        </ul>
+
+        <!-- Replace href with your actual Lemon Squeezy checkout URL -->
+        <a id="checkout-link" href="#" class="btn btn-primary btn-lg" target="_blank" rel="noopener">
+          Suscribirme ahora →
+        </a>
+        <p class="paywall-note">Cancela cuando quieras · Pago seguro con Lemon Squeezy</p>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

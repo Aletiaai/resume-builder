@@ -1,0 +1,18 @@
+# Secrets — must never reach the image
+.env
+.env.*
+
+# Not copied by Dockerfile — exclude from build context
+.git/
+.gitignore
+.venv/
+.ruff_cache/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+logs/
+tests/
+docker-compose.yml
+README.md
+CLAUDE.md
+.DS_Store
