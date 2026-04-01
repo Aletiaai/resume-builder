@@ -65,6 +65,7 @@ async function bootstrap() {
 
   currentUser = res.data;
   $("user-email").textContent = currentUser.email;
+  $("checkout-link").href = CHECKOUT_URL + "?checkout[email]=" + encodeURIComponent(currentUser.email);
 
   // Restore base resume path from server (survives logout/login and browser clears)
   if (currentUser.base_resume_path) {
@@ -308,7 +309,6 @@ $("btn-new-generation").addEventListener("click", () => {
 // ── Paywall checkout link ──
 // Replace this with your actual Lemon Squeezy checkout URL
 const CHECKOUT_URL = "https://job-hunting.lemonsqueezy.com/checkout/buy/b56eb25b-b7db-494b-958c-d62096d72fd4";
-$("checkout-link").href = CHECKOUT_URL;
 
 // ── Init ──
 bootstrap();
