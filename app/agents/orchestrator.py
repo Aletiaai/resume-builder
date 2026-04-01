@@ -34,6 +34,7 @@ async def run(
     supabase_client,
     storage_svc: storage_service.StorageService,
     logging_svc: LoggingService,
+    target_company: str = "",
 ) -> dict:
     """Run the full resume generation pipeline.
 
@@ -58,6 +59,12 @@ async def run(
             job_description=job_description,
             gemini_api_key=gemini_api_key,
         )
+
+        # If the user supplied a company name, trust it over the model's extraction.
+        # If neither the user nor the model produced one, keep empty — docx_service
+        # will fall back to 'XX' in the filename.
+        if target_company:
+            tailored_resume.target_company = target_company
 
         await logging_svc.log_llm_call(
             user_id=user_id,

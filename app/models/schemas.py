@@ -76,6 +76,7 @@ class GeminiKeyResponse(BaseModel):
 class GenerationRequest(BaseModel):
     job_description: str
     base_resume_path: str
+    target_company: str = ""
 
 
 class GenerationStatusResponse(BaseModel):

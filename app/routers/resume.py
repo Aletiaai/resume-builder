@@ -146,6 +146,7 @@ async def generate_resume(
         generation_id=generation_id,
         original_resume_text=original_resume_text,
         job_description=body.job_description,
+        target_company=body.target_company,
         gemini_api_key=gemini_api_key,
         supabase_client=supabase,
         storage_svc=storage_svc,

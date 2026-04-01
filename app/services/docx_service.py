@@ -6,6 +6,7 @@ Uses python-docx. Returns document bytes — never writes to local disk.
 
 import io
 import logging
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -152,11 +153,13 @@ def generate_filename(
     month_abbr = month_map[date.month]
     year_2d = str(date.year)[-2:]
 
-    # Company code: first 2 letters, capitalized
-    company_code = (target_company[:2].capitalize() if target_company else "XX")
+    # Company code: first 2 ASCII-safe letters, capitalized; fallback 'XX'
+    company_safe = _ascii_safe(target_company.strip()) if target_company else ""
+    company_code = company_safe[:2].capitalize() or "XX"
 
     doc_type = "CV" if language == "es" else "resume"
-    return f"{name_part}-{doc_type}-{month_abbr}{year_2d}-{company_code}.docx"
+    filename = f"{name_part}-{doc_type}-{month_abbr}{year_2d}-{company_code}.docx"
+    return re.sub(r'[^a-zA-Z0-9\-_.]', '', filename)
 
 
 # ---------------------------------------------------------------------------

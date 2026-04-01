@@ -240,9 +240,10 @@ $("btn-generate").addEventListener("click", async () => {
   $("btn-generate").disabled = true;
   show("generating-spinner");
 
+  const targetCompany = $("target-company")?.value.trim() || "";
   const res = await apiFetch("/resume/generate", {
     method: "POST",
-    body: JSON.stringify({ job_description: jd, base_resume_path: baseResumePath }),
+    body: JSON.stringify({ job_description: jd, base_resume_path: baseResumePath, target_company: targetCompany }),
   });
 
   if (!res.success) {
