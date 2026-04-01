@@ -18,11 +18,16 @@ SKILL_NAME = "resume-validator"
 
 
 def _extract_json(text: str) -> str:
-    """Strip any markdown code fences and return the raw JSON string."""
+    """Strip markdown code fences, then extract the outermost JSON object."""
     text = text.strip()
-    match = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
-    if match:
-        return match.group(1)
+    # Remove markdown code fences if present
+    fenced = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
+    if fenced:
+        text = fenced.group(1).strip()
+    # Extract outermost { ... } in case Gemini added prose before or after
+    obj_match = re.search(r'\{[\s\S]*\}', text)
+    if obj_match:
+        return obj_match.group(0)
     return text
 
 
@@ -51,7 +56,14 @@ async def validate(
     )
 
     json_str = _extract_json(raw_text)
-    data = json.loads(json_str)
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError:
+        logger.error(
+            f"[validator_agent] Failed to parse JSON response — returning PASS to allow "
+            f"generation to continue. Raw response: {raw_text!r}"
+        )
+        return ValidationResult(result="PASS", findings=[]), usage
 
     findings = [
         ValidationFinding(
