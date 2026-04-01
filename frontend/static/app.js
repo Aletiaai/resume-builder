@@ -151,8 +151,9 @@ $("form-register").addEventListener("submit", async (e) => {
 function logout() {
   token = null;
   currentUser = null;
-  localStorage.removeItem("token");
-  showScreen("screen-auth");
+  localStorage.clear();
+  sessionStorage.clear();
+  window.location.replace("/app.html");
 }
 $("btn-logout").addEventListener("click", logout);
 
