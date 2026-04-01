@@ -133,12 +133,6 @@ async def generate_resume(
 
     generation_id = gen_result.data[0]["id"]
 
-    # Mark free trial as used immediately (before background task completes)
-    if user["tier"] == "free_trial":
-        supabase.table("users").update({
-            "free_trial_used": True,
-        }).eq("id", user["id"]).execute()
-
     # Run orchestration as background task
     background_tasks.add_task(
         _run_orchestrator,
@@ -186,6 +180,12 @@ async def get_generation_status(
             download_url = await storage_svc.get_signed_url(gen["output_file_path"])
         except Exception as e:
             logger.error(f"Failed to get signed URL: {e}")
+
+        # Mark free trial as used the first time the completed file is served
+        if user["tier"] == "free_trial" and not user.get("free_trial_used"):
+            supabase.table("users").update({
+                "free_trial_used": True,
+            }).eq("id", user["id"]).execute()
 
         # Log download event (only once — could track this more precisely)
         await logging_svc.log_user_event(
