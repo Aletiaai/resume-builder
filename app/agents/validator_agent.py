@@ -78,8 +78,15 @@ async def validate(
         for f in data.get("findings", [])
     ]
 
+    explicit_result = data.get("result")
+    if explicit_result:
+        result_str = explicit_result
+    else:
+        # Infer from findings when the LLM omits the "result" key
+        result_str = "PASS" if not findings else "FAIL"
+
     result = ValidationResult(
-        result=data.get("result", "FAIL"),
+        result=result_str,
         findings=findings,
     )
 

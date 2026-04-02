@@ -72,7 +72,7 @@ async def repair(
             dates=e["dates"],
             bullets=e["bullets"],
         )
-        for e in data.get("experience", tailored_resume.model_dump()["experience"])
+        for e in (data.get("experience") or tailored_resume.model_dump()["experience"])
     ]
 
     repaired = TailoredResume(
