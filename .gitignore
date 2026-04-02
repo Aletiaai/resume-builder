@@ -23,3 +23,4 @@ logs/
 
 # macOS
 .DS_Store
+github-actions-key.json

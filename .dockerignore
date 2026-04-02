@@ -16,3 +16,4 @@ docker-compose.yml
 README.md
 CLAUDE.md
 .DS_Store
+github-actions-key.json
