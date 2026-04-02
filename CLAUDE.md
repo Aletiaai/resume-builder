@@ -7,8 +7,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-## What This Project Is
-
 A web application that generates tailored, ATS-optimized resumes for job seekers. Users upload their base resume once, then paste a job description every time they need a new tailored version. The app applies a proprietary resume methodology (defined in the skill files under `.claude/skills/`) to produce consistent, high-quality output. A multi-agent validation loop catches hallucinations before delivery.
 
 The app is distributed through influencer affiliate channels. Lemon Squeezy handles subscriptions and automatic affiliate payouts. The UI is fully in Spanish. The resume generation engine supports both Spanish and English output.
@@ -68,6 +66,11 @@ resume-builder/
 │   └── static/
 │       ├── style.css
 │       └── app.js
+├── .github/
+│   └── workflows/
+│       └── deploy.yml                 ← CI/CD: deploys to Cloud Run on push to main
+├── .gitignore
+├── .dockerignore
 ├── .env.example                       ← all required env vars documented here, no secrets
 ├── docker-compose.yml
 ├── Dockerfile
@@ -142,7 +145,9 @@ The platform pays nothing for LLM calls. Every user — including free trial use
 
 Free trial limit must be enforced in the backend (database counter on the user record), never in the frontend.
 
-After the free trial resume is generated and downloaded, the user sees a paywall screen prompting them to subscribe.
+`free_trial_used` is set to `True` when the completed file is first served to the user (in `GET /resume/generation/{id}` when `status == "completed"`), not when generation is requested. This ensures a failed generation does not consume the trial.
+
+After the free trial resume is downloaded, the user sees a paywall screen prompting them to subscribe.
 
 ---
 
@@ -235,8 +240,8 @@ Lemon Squeezy sends webhooks to `/billing/webhook` on subscription events.
 
 Every resume generation request must check subscription status server-side before proceeding. Never trust the frontend to enforce this.
 
-Affiliate links follow the pattern: `https://yourapp.com/?ref=[influencer_code]`
-Store the referral code at signup so Lemon Squeezy can attribute commissions correctly.
+Affiliate links follow the pattern: `https://yourapp.com/?aff=[influencer_code]`
+The `?aff=` parameter is captured in `localStorage` on page load (so it survives navigation to `/app.html`) and passed as `?aff=` to `POST /auth/register`. The backend stores it in the `referral_code` column. `localStorage` is cleared after successful registration.
 
 ---
 
@@ -274,12 +279,12 @@ ENVIRONMENT=development            # development | production
 
 ## Deployment — Google Cloud Run
 
-- Containerized with Docker
-- Deployed to Google Cloud Run
+- Containerized with Docker; deployed to Google Cloud Run via `--source .` (Cloud Build builds the image)
+- **CI/CD:** `.github/workflows/deploy.yml` triggers on every push to `main`. Authenticates with GCP using the `GCP_SA_KEY` GitHub secret (base64-encoded service account key) and runs `gcloud run deploy resume-builder --source . --region=us-central1 --platform=managed --allow-unauthenticated --project=resume-builder-aletia`
 - Scales to zero when idle — no cost during low-traffic periods
 - MVP traffic expected to stay within GCP free tier (2M requests/month, 360K GB-seconds compute)
-- `Dockerfile` must be production-ready from the start (no dev-only shortcuts baked in)
 - `docker-compose.yml` is for local development only
+- The service account behind `GCP_SA_KEY` needs: `roles/run.admin`, `roles/cloudbuild.builds.editor`, `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`
 
 ---
 

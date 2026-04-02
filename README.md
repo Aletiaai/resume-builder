@@ -92,6 +92,11 @@ resume-builder/
 │       ├── app.js
 │       └── style.css
 ├── logs/                               ← rotating log files (git-ignored)
+├── .github/
+│   └── workflows/
+│       └── deploy.yml                 ← CI/CD: auto-deploy to Cloud Run on push to main
+├── .gitignore
+├── .dockerignore
 ├── .env.example
 ├── docker-compose.yml
 ├── Dockerfile
@@ -293,7 +298,7 @@ All endpoints return a standard envelope:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/auth/register` | Register a new user. Accepts `?ref=<code>` for affiliate tracking. |
+| `POST` | `/auth/register` | Register a new user. Accepts `?aff=<code>` for affiliate tracking. |
 | `POST` | `/auth/login` | Authenticate and receive a JWT. |
 | `GET` | `/auth/me` | Return the current user's profile. |
 | `POST` | `/auth/gemini-key` | Validate and save a Gemini API key (encrypted). |
@@ -304,7 +309,7 @@ All endpoints return a standard envelope:
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/resume/upload` | Upload a `.docx` base resume to Supabase Storage. |
-| `POST` | `/resume/generate` | Start resume generation. Returns `generation_id` immediately; work runs in background. |
+| `POST` | `/resume/generate` | Start resume generation. Returns `generation_id` immediately; work runs in background. Optional `target_company` field in body pre-fills the company name for the output filename. |
 | `GET` | `/resume/generation/{id}` | Poll for generation status. Returns signed download URL when complete. |
 
 ### Billing
@@ -388,7 +393,7 @@ POST /resume/generate
 
 Every user — including free trial — must provide their own Gemini API key before generating any resume. The platform pays nothing for LLM calls.
 
-**Affiliate tracking:** append `?ref=<influencer_code>` to the registration URL. The code is stored on the user record and Lemon Squeezy attributes commissions automatically.
+**Affiliate tracking:** append `?aff=<influencer_code>` to any page URL. The code is captured in `localStorage` on load and passed to `/auth/register` at signup, then stored in the `referral_code` column. Lemon Squeezy attributes commissions automatically.
 
 **Lemon Squeezy webhook events handled:**
 
@@ -402,27 +407,24 @@ Every user — including free trial — must provide their own Gemini API key be
 
 ## Deployment to Cloud Run
 
-```bash
-# Build and push image
-docker build -t gcr.io/<project-id>/resume-builder .
-docker push gcr.io/<project-id>/resume-builder
+Deployment is automated via GitHub Actions. Every push to `main` triggers `.github/workflows/deploy.yml`, which authenticates to GCP and runs:
 
-# Deploy
+```bash
 gcloud run deploy resume-builder \
-  --image gcr.io/<project-id>/resume-builder \
-  --platform managed \
-  --region us-central1 \
+  --source . \
+  --region=us-central1 \
+  --platform=managed \
   --allow-unauthenticated \
-  --set-env-vars "ENVIRONMENT=production" \
-  --set-secrets "SUPABASE_URL=...,SUPABASE_SERVICE_KEY=..." \
-  --min-instances 0 \
-  --max-instances 10 \
-  --concurrency 80
+  --project=resume-builder-aletia
 ```
 
-**Important:** the app runs with `--workers 1`. Cloud Run scales via instances, not workers.
+`--source .` uses Cloud Build to build the container image — no manual `docker build/push` required.
 
-The service scales to zero when idle, keeping costs at zero during low-traffic periods. MVP traffic is expected to fall within the GCP free tier (2M requests/month, 360K GB-seconds compute).
+**GitHub secret required:** `GCP_SA_KEY` — a base64-encoded GCP service account key JSON. The service account needs: `roles/run.admin`, `roles/cloudbuild.builds.editor`, `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`.
+
+**Required GCP APIs:** Cloud Run, Cloud Build, Artifact Registry.
+
+**Important:** the app runs with `--workers 1`. Cloud Run scales via instances, not workers. The service scales to zero when idle — no cost during low-traffic periods. MVP traffic is expected to fall within the GCP free tier (2M requests/month, 360K GB-seconds compute).
 
 ---
 

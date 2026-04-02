@@ -3,14 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CurrículumIA — App</title>
+  <title>CV Builder by Aletia</title>
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body class="app-body">
 
   <!-- ── APP SHELL ── -->
   <nav class="app-nav">
-    <a href="/" class="logo">CurrículumIA</a>
+    <a href="/" class="logo">CV Builder <span>by Aletia</span></a>
     <div class="nav-right">
       <span id="user-email" class="user-email"></span>
       <button id="btn-logout" class="btn btn-sm btn-outline">Cerrar sesión</button>
@@ -70,7 +74,7 @@
       <div class="card gemini-card">
         <h2>Configura tu API key de Gemini</h2>
         <p class="section-desc">
-          CurrículumIA usa la IA de Google Gemini para generar tu currículum.
+          CV Builder usa la IA de Google Gemini para generar tu currículum.
           Necesitas tu propia API key — es gratis y tarda menos de 2 minutos.
         </p>
 
@@ -195,7 +199,7 @@
     <section id="screen-paywall" class="screen hidden">
       <div class="card paywall-card">
         <h2>¡Prueba completada!</h2>
-        <p>
+        <p class="section-desc">
           Ya usaste tu currículum gratuito. Suscríbete al plan Básico para
           generar currículums ilimitados.
         </p>
@@ -205,10 +209,10 @@
         </div>
 
         <ul class="paywall-features">
-          <li>✓ Currículums ilimitados</li>
-          <li>✓ Validación anti-alucinaciones</li>
-          <li>✓ Descarga en Word (.docx)</li>
-          <li>✓ Usa tu API key de Gemini</li>
+          <li>Currículums ilimitados</li>
+          <li>Validación anti-alucinaciones</li>
+          <li>Descarga en Word (.docx)</li>
+          <li>Usa tu API key de Gemini</li>
         </ul>
 
         <!-- Replace href with your actual Lemon Squeezy checkout URL -->
