@@ -33,6 +33,11 @@ _EN_MONTHS = {
     7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec",
 }
 
+_VALIDATION_COMMENT = (
+    "No pudimos verificar este contenido en tu currículum original. "
+    "Revísalo antes de enviarlo."
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -114,6 +119,32 @@ def _add_word_comment(doc: Document, para, comment_text: str) -> None:
     run.font.italic = True
 
 
+def _render_bold_markdown(para, text: str, size_pt: float) -> None:
+    """Render a string with **bold** markdown as alternating bold/normal runs.
+
+    Splits on ** markers — odd-indexed segments (1, 3, …) are bold,
+    even-indexed (0, 2, …) are normal weight. Handles the common LLM output
+    pattern of **Category**: description without any special casing needed.
+    """
+    parts = re.split(r'\*\*', text)
+    for i, part in enumerate(parts):
+        if not part:
+            continue
+        run = para.add_run(part)
+        _set_run_font(run, size_pt, bold=(i % 2 == 1))
+
+
+def _text_is_flagged(text: str, flagged_texts: set[str]) -> bool:
+    """Return True if text substring-matches any entry in flagged_texts.
+
+    Checks both directions: the flagged_text may quote only part of the
+    content (validator quoting a phrase inside a bullet), or the full
+    content may be shorter than the flagged_text. Either way counts as a match.
+    """
+    t = text.strip().lower()
+    return any(ft in t or t in ft for ft in flagged_texts)
+
+
 # ---------------------------------------------------------------------------
 # Filename generation
 # ---------------------------------------------------------------------------
@@ -168,14 +199,17 @@ def generate_filename(
 
 def generate_docx(
     tailored_resume: TailoredResume,
-    flagged_sections: list[str],
+    flagged_findings: list[dict],
 ) -> tuple[bytes, str]:
     """Generate a formatted DOCX from a TailoredResume model.
 
     Args:
         tailored_resume: The tailored resume data.
-        flagged_sections: List of section names that failed validation
-                          (highlighted red with a comment).
+        flagged_findings: List of dicts with keys 'section' and 'flagged_text',
+                          one entry per ValidationFinding that survived repair.
+                          For non-experience sections the whole section is
+                          highlighted; for experience, individual titles and
+                          bullets are matched by text.
 
     Returns:
         Tuple of (docx_bytes, filename).
@@ -189,7 +223,16 @@ def generate_docx(
     style.font.size = Pt(10)
     style.font.color.rgb = COLOR_TEXT
 
-    flagged_set = {s.lower() for s in flagged_sections}
+    # Sections where the whole block is flagged (summary, skills, education, languages).
+    flagged_set = {item["section"] for item in flagged_findings}
+
+    # For experience: normalized flagged texts for per-item matching.
+    exp_flagged_texts: set[str] = {
+        item["flagged_text"].strip().lower()
+        for item in flagged_findings
+        if item["section"] == "experience"
+    }
+
     lang = tailored_resume.language
 
     # ------------------------------------------------------------------
@@ -224,10 +267,7 @@ def generate_docx(
     _set_run_font(summary_run, 10)
     if summary_flagged:
         _apply_red_highlight(summary_para)
-        _add_word_comment(
-            doc, summary_para,
-            "No pudimos verificar este contenido en tu currículum original. Revísalo antes de enviarlo."
-        )
+        _add_word_comment(doc, summary_para, _VALIDATION_COMMENT)
 
     # ------------------------------------------------------------------
     # Key Skills
@@ -240,23 +280,24 @@ def generate_docx(
     skills_para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     skills_para.paragraph_format.space_before = Pt(0)
     skills_para.paragraph_format.space_after = Pt(0)
-    skills_run = skills_para.add_run(" | ".join(tailored_resume.skills))
-    _set_run_font(skills_run, 10)
+    # Render skills with **bold** markdown support (e.g. "**Programming**: Python, SQL")
+    skills_text = " | ".join(tailored_resume.skills)
+    _render_bold_markdown(skills_para, skills_text, size_pt=10)
     if skills_flagged:
         _apply_red_highlight(skills_para)
-        _add_word_comment(
-            doc, skills_para,
-            "No pudimos verificar este contenido en tu currículum original. Revísalo antes de enviarlo."
-        )
+        _add_word_comment(doc, skills_para, _VALIDATION_COMMENT)
 
     # ------------------------------------------------------------------
     # Relevant Work Experience
     # ------------------------------------------------------------------
     exp_label = "EXPERIENCIA PROFESIONAL RELEVANTE" if lang == "es" else "RELEVANT WORK EXPERIENCE"
-    exp_section_flagged = "experience" in flagged_set
-    _add_section_header(doc, exp_label, flagged=exp_section_flagged)
+    # Never highlight the section header — individual items are flagged granularly below.
+    _add_section_header(doc, exp_label)
 
     for job in tailored_resume.experience:
+        title_text = f"{job.company} | {job.title}"
+        title_flagged = bool(exp_flagged_texts) and _text_is_flagged(title_text, exp_flagged_texts)
+
         # Job title line with right-aligned date
         job_para = doc.add_paragraph()
         job_para.paragraph_format.space_before = Twips(80)
@@ -265,23 +306,21 @@ def generate_docx(
         tab_stops = job_para.paragraph_format.tab_stops
         tab_stops.add_tab_stop(Twips(9360), WD_TAB_ALIGNMENT.RIGHT)
 
-        title_run = job_para.add_run(f"{job.company} | {job.title}")
+        title_run = job_para.add_run(title_text)
         _set_run_font(title_run, 10, bold=True)
         date_run = job_para.add_run(f"\t{job.dates}")
         _set_run_font(date_run, 10, bold=True)
 
-        if exp_section_flagged:
+        if title_flagged:
             _apply_red_highlight(job_para)
+            _add_word_comment(doc, job_para, _VALIDATION_COMMENT)
 
-        # Bullet points
+        # Bullet points — each checked individually
         for bullet in job.bullets:
-            _add_bullet_paragraph(doc, bullet, flagged=exp_section_flagged)
-
-        if exp_section_flagged:
-            _add_word_comment(
-                doc, job_para,
-                "No pudimos verificar este contenido en tu currículum original. Revísalo antes de enviarlo."
-            )
+            bullet_flagged = bool(exp_flagged_texts) and _text_is_flagged(bullet, exp_flagged_texts)
+            bullet_para = _add_bullet_paragraph(doc, bullet, flagged=bullet_flagged)
+            if bullet_flagged:
+                _add_word_comment(doc, bullet_para, _VALIDATION_COMMENT)
 
     # ------------------------------------------------------------------
     # Education
@@ -301,8 +340,7 @@ def generate_docx(
 
     if edu_flagged and tailored_resume.education:
         _add_word_comment(
-            doc, doc.paragraphs[-1],
-            "No pudimos verificar este contenido en tu currículum original. Revísalo antes de enviarlo."
+            doc, doc.paragraphs[-1], _VALIDATION_COMMENT
         )
 
     # ------------------------------------------------------------------
@@ -328,10 +366,7 @@ def generate_docx(
         _set_run_font(lang_run, 10, bold=True)
     if lang_flagged:
         _apply_red_highlight(lang_para)
-        _add_word_comment(
-            doc, lang_para,
-            "No pudimos verificar este contenido en tu currículum original. Revísalo antes de enviarlo."
-        )
+        _add_word_comment(doc, lang_para, _VALIDATION_COMMENT)
 
     # ------------------------------------------------------------------
     # Serialize to bytes

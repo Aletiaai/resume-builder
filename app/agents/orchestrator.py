@@ -175,20 +175,26 @@ async def run(
             final_outcome = "repaired"
 
         # ------------------------------------------------------------------
-        # Step 5: Determine flagged sections for DOCX highlighting
+        # Step 5: Build granular flagged findings for DOCX highlighting
         # ------------------------------------------------------------------
-        flagged_sections: list[str] = []
+        # Each entry carries section + flagged_text so docx_service can
+        # highlight individual bullets/titles rather than whole sections.
+        flagged_findings: list[dict] = []
         if not passed and final_validation:
-            flagged_sections = list(
-                {f.section.lower() for f in final_validation.findings}
-            )
+            flagged_findings = [
+                {"section": f.section.lower(), "flagged_text": f.flagged_text}
+                for f in final_validation.findings
+            ]
+
+        # Distinct section count for the UI banner ("N sección(es) marcadas").
+        flagged_section_count = len({item["section"] for item in flagged_findings})
 
         # ------------------------------------------------------------------
         # Step 6: Generate DOCX
         # ------------------------------------------------------------------
         docx_bytes, filename = docx_service.generate_docx(
             tailored_resume=tailored_resume,
-            flagged_sections=flagged_sections,
+            flagged_findings=flagged_findings,
         )
 
         # ------------------------------------------------------------------
@@ -205,13 +211,13 @@ async def run(
         # ------------------------------------------------------------------
         # Step 8: Update generations table
         # ------------------------------------------------------------------
-        has_flagged = len(flagged_sections) > 0
+        has_flagged = len(flagged_findings) > 0
         supabase_client.table("generations").update({
             "status": "completed",
             "language_detected": tailored_resume.language,
             "output_file_path": file_path,
             "has_flagged_sections": has_flagged,
-            "flagged_section_count": len(flagged_sections),
+            "flagged_section_count": flagged_section_count,
         }).eq("id", generation_id).execute()
 
         await logging_svc.log_user_event(
@@ -221,7 +227,7 @@ async def run(
                 "generation_id": generation_id,
                 "language": tailored_resume.language,
                 "final_outcome": final_outcome,
-                "flagged_section_count": len(flagged_sections),
+                "flagged_section_count": flagged_section_count,
             },
         )
 
@@ -229,7 +235,7 @@ async def run(
             "generation_id": generation_id,
             "download_url": download_url,
             "has_flagged_sections": has_flagged,
-            "flagged_section_count": len(flagged_sections),
+            "flagged_section_count": flagged_section_count,
         }
 
     except GeminiDailyQuotaExhaustedError as exc:
