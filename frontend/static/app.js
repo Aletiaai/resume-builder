@@ -432,18 +432,26 @@ function startPolling(generationId) {
 
     consecutiveFailures = 0;
     const gen = res.data;
-    if (gen.status === "processing") return;  // still running
-
-    clearInterval(pollingInterval);
-    pollingInterval = null;
-    $("btn-generate").disabled = false;
-    hide("generating-spinner");
 
     if (gen.status === "completed") {
+      clearInterval(pollingInterval);
+      pollingInterval = null;
+      $("btn-generate").disabled = false;
+      hide("generating-spinner");
       showResultScreen(gen);
-    } else {
-      showErrorHTML("generate-error", _generationErrorMessage(gen.error_code));
+      return;
     }
+
+    if (gen.status === "failed") {
+      clearInterval(pollingInterval);
+      pollingInterval = null;
+      $("btn-generate").disabled = false;
+      hide("generating-spinner");
+      showErrorHTML("generate-error", _generationErrorMessage(gen.error_code));
+      return;
+    }
+
+    // status === "processing" (or unknown) — keep polling
   }, 5000);
 }
 
