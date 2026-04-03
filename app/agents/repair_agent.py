@@ -129,7 +129,10 @@ async def repair(
         findings_json = json.dumps(
             [f.model_dump() for f in section_findings], indent=2, ensure_ascii=False
         )
-        section_json = json.dumps(section_value, indent=2, ensure_ascii=False)
+        section_json = json.dumps(
+            section_value, indent=2, ensure_ascii=False,
+            default=lambda o: o.model_dump() if hasattr(o, "model_dump") else str(o),
+        )
 
         user_prompt = REPAIR_SECTION_PROMPT_TEMPLATE.format(
             section_name=section,
