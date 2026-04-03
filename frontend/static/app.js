@@ -21,6 +21,7 @@ const $ = (id) => document.getElementById(id);
 const show = (id) => { const el = $(id); if (el) { el.classList.remove("hidden"); el.classList.add("active"); } };
 const hide = (id) => { const el = $(id); if (el) { el.classList.add("hidden"); el.classList.remove("active"); } };
 const showError = (id, msg) => { const el = $(id); if (el) { el.textContent = msg; el.classList.remove("hidden"); } };
+const showErrorHTML = (id, html) => { const el = $(id); if (el) { el.innerHTML = html; el.classList.remove("hidden"); } };
 const clearError = (id) => { const el = $(id); if (el) { el.textContent = ""; el.classList.add("hidden"); } };
 
 // ── API helper ──
@@ -255,6 +256,8 @@ $("btn-generate").addEventListener("click", async () => {
     // Paywall check
     if (res.error && (res.error.includes("Suscríbete") || res.error.includes("suscripción"))) {
       showScreen("screen-paywall");
+    } else if (res.error && res.error.includes("API key de Gemini")) {
+      showErrorHTML("generate-error", "Necesitas configurar tu API key de Gemini antes de generar. " + _SETTINGS_LINK);
     } else {
       showError("generate-error", res.error || "Error al generar el currículum.");
     }
@@ -264,6 +267,21 @@ $("btn-generate").addEventListener("click", async () => {
   const generationId = res.data.generation_id;
   startPolling(generationId);
 });
+
+const _SETTINGS_LINK = '<a href="#" onclick="showScreen(\'screen-gemini\'); return false;" style="color:#DB3D44; text-decoration:underline;">Ir a configuración →</a>';
+
+function _generationErrorMessage(errorCode) {
+  switch (errorCode) {
+    case "quota_exhausted":
+      return "Alcanzaste el límite diario de tu API key de Gemini. Google restablece las cuotas gratuitas cada día a medianoche (hora del Pacífico). Vuelve a intentarlo mañana.";
+    case "invalid_api_key":
+      return "Tu API key de Gemini no es válida o fue revocada. " + _SETTINGS_LINK;
+    case "timeout":
+      return "La generación tardó demasiado tiempo. Por favor intenta de nuevo.";
+    default:
+      return "Hubo un error al generar tu currículum. Por favor intenta de nuevo.";
+  }
+}
 
 function startPolling(generationId) {
   clearInterval(pollingInterval);
@@ -281,7 +299,7 @@ function startPolling(generationId) {
     if (gen.status === "completed") {
       showResultScreen(gen);
     } else {
-      showError("generate-error", "Hubo un error al generar tu currículum. Intenta de nuevo.");
+      showErrorHTML("generate-error", _generationErrorMessage(gen.error_code));
     }
   }, 3000);
 }

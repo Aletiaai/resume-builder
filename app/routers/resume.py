@@ -1,5 +1,6 @@
 """Resume router — upload base resume and trigger generation."""
 
+import asyncio
 import logging
 from io import BytesIO
 
@@ -194,12 +195,25 @@ async def get_generation_status(
             metadata={"generation_id": generation_id},
         )
 
+    raw_status = gen["status"]
+    # Map internal failure status codes to a clean error_code for the frontend.
+    _status_to_error = {
+        "failed_quota": "quota_exhausted",
+        "failed_key": "invalid_api_key",
+        "failed_timeout": "timeout",
+        "failed": "unknown",
+    }
+    error_code = _status_to_error.get(raw_status)
+    # Normalize all failure variants to "failed" so the frontend only checks one value.
+    normalized_status = "failed" if error_code else raw_status
+
     response = GenerationStatusResponse(
         generation_id=generation_id,
-        status=gen["status"],
+        status=normalized_status,
         download_url=download_url,
         has_flagged_sections=gen.get("has_flagged_sections", False),
         flagged_section_count=gen.get("flagged_section_count", 0),
+        error_code=error_code,
     )
     return APIResponse(success=True, data=response.model_dump())
 
@@ -208,11 +222,26 @@ async def get_generation_status(
 # Background task wrapper
 # ---------------------------------------------------------------------------
 
+_GENERATION_TIMEOUT_SECONDS = 300  # 5 minutes
+
+
 async def _run_orchestrator(**kwargs) -> None:
-    """Thin wrapper so background task exceptions are logged."""
+    """Thin wrapper: adds timeout and logs unhandled exceptions."""
+    generation_id = kwargs.get("generation_id")
+    supabase = kwargs.get("supabase_client")
     try:
-        await orchestrator.run(**kwargs)
+        await asyncio.wait_for(orchestrator.run(**kwargs), timeout=_GENERATION_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        logger.error(f"Generation {generation_id} timed out after {_GENERATION_TIMEOUT_SECONDS}s")
+        if supabase and generation_id:
+            try:
+                supabase.table("generations").update(
+                    {"status": "failed_timeout"}
+                ).eq("id", generation_id).execute()
+            except Exception:
+                pass
     except Exception as exc:
+        # Orchestrator already updated the DB status — just log here.
         logger.exception(f"Background orchestrator failed: {exc}")
 
 

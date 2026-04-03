@@ -18,6 +18,7 @@ from typing import Optional
 from app.agents import tailor_agent, validator_agent, repair_agent
 from app.models.schemas import ValidationResult
 from app.services import docx_service, storage_service
+from app.services.llm_service import GeminiQuotaExhaustedError, GeminiInvalidKeyError
 from app.services.logging_service import LoggingService
 
 logger = logging.getLogger(__name__)
@@ -221,23 +222,45 @@ async def run(
             "flagged_section_count": len(flagged_sections),
         }
 
+    except GeminiQuotaExhaustedError as exc:
+        logger.warning(f"[orchestrator] Quota exhausted for generation {generation_id}: {exc}")
+        _mark_failed(supabase_client, generation_id, "failed_quota")
+        await logging_svc.log_user_event(
+            user_id=user_id,
+            event_type="generation_error",
+            metadata={"generation_id": generation_id, "error": "quota_exhausted"},
+        )
+        raise
+
+    except GeminiInvalidKeyError as exc:
+        logger.warning(f"[orchestrator] Invalid API key for generation {generation_id}: {exc}")
+        _mark_failed(supabase_client, generation_id, "failed_key")
+        await logging_svc.log_user_event(
+            user_id=user_id,
+            event_type="generation_error",
+            metadata={"generation_id": generation_id, "error": "invalid_api_key"},
+        )
+        raise
+
     except Exception as exc:
         logger.exception(f"[orchestrator] Unhandled error for generation {generation_id}: {exc}")
-
-        # Mark generation as failed in DB
-        try:
-            supabase_client.table("generations").update({
-                "status": "failed",
-            }).eq("id", generation_id).execute()
-        except Exception:
-            pass
-
+        _mark_failed(supabase_client, generation_id, "failed")
         await logging_svc.log_user_event(
             user_id=user_id,
             event_type="generation_error",
             metadata={"generation_id": generation_id, "error": str(exc)},
         )
         raise
+
+
+def _mark_failed(supabase_client, generation_id: str, status: str) -> None:
+    """Update the generation record with a failure status."""
+    try:
+        supabase_client.table("generations").update(
+            {"status": status}
+        ).eq("id", generation_id).execute()
+    except Exception:
+        pass
 
 
 def _get_user_tier(supabase_client, user_id: str) -> str:

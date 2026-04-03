@@ -362,6 +362,7 @@ textarea { resize: vertical; min-height: 160px; }
 /* ── Feedback ── */
 .form-error { color: #f87171; font-size: 0.875rem; margin-top: 0.25rem; }
 .form-error.hidden { display: none; }
+.form-error a { color: #DB3D44; text-decoration: underline; }
 .form-success { color: #4ade80; font-size: 0.875rem; margin-top: 0.25rem; }
 .form-success.hidden { display: none; }
 

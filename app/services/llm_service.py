@@ -11,8 +11,21 @@ import time
 from typing import Optional
 
 import google.generativeai as genai
-from google.api_core.exceptions import ResourceExhausted
+from google.api_core.exceptions import (
+    ResourceExhausted,
+    InvalidArgument,
+    PermissionDenied,
+    Unauthenticated,
+)
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
+
+class GeminiQuotaExhaustedError(Exception):
+    """Raised when the user's Gemini daily quota is exhausted."""
+
+
+class GeminiInvalidKeyError(Exception):
+    """Raised when the Gemini API key is invalid or revoked."""
 
 from app.services import skill_service
 
@@ -81,9 +94,11 @@ async def call(
         try:
             response = model.generate_content(parts)
             break
+        except (InvalidArgument, PermissionDenied, Unauthenticated) as e:
+            raise GeminiInvalidKeyError(str(e)) from e
         except ResourceExhausted as e:
             if attempt == _MAX_RETRIES:
-                raise
+                raise GeminiQuotaExhaustedError(str(e)) from e
             match = _RETRY_DELAY_RE.search(str(e))
             delay = float(match.group(1)) if match else (30.0 * (2 ** attempt))
             logger.warning(

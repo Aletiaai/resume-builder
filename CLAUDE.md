@@ -7,7 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-A web application that generates tailored, ATS-optimized resumes for job seekers. Users upload their base resume once, then paste a job description every time they need a new tailored version. The app applies a proprietary resume methodology (defined in the skill files under `.claude/skills/`) to produce consistent, high-quality output. A multi-agent validation loop catches hallucinations before delivery.
+**CV Builder by Aletia** — a web application that generates tailored, ATS-optimized resumes for job seekers. Users upload their base resume once, then paste a job description every time they need a new tailored version. The app applies a proprietary resume methodology (defined in the skill files under `.claude/skills/`) to produce consistent, high-quality output. A multi-agent validation loop catches hallucinations before delivery.
+
+Deployed at [cv.aletia.tech](https://cv.aletia.tech). Product of Aletia (Descifrador de Talento SAPI de CV).
 
 The app is distributed through influencer affiliate channels. Lemon Squeezy handles subscriptions and automatic affiliate payouts. The UI is fully in Spanish. The resume generation engine supports both Spanish and English output.
 
@@ -16,7 +18,7 @@ The app is distributed through influencer affiliate channels. Lemon Squeezy hand
 ## Tech Stack
 
 - **Backend**: Python, FastAPI
-- **Frontend**: Minimal HTML/CSS/JS (no heavy framework — keep it simple and fast)
+- **Frontend**: Minimal HTML/CSS/JS (no heavy framework — keep it simple and fast). Uses the Aletia design system: DM Sans font (Google Fonts), `#1C1649` navy background, `#DB3D44` red accent, `#9B97C2` muted text, `rgba(255,255,255,0.05)` card surfaces. Dark theme throughout.
 - **Database & Storage**: Supabase (Postgres for user data, Supabase Storage for resume files)
 - **Document generation**: python-docx (DOCX output only — formatting specs are defined in the resume-tailor SKILL.md, do not redefine them here)
 - **Payments & Affiliates**: Lemon Squeezy (webhooks for subscription events)
@@ -63,8 +65,9 @@ resume-builder/
 ├── frontend/
 │   ├── index.html                     ← landing page (in Spanish)
 │   ├── app.html                       ← main user interface (in Spanish)
+│   ├── favicon.ico
 │   └── static/
-│       ├── style.css
+│       ├── style.css                  ← Aletia design system (DM Sans, dark theme)
 │       └── app.js
 ├── .github/
 │   └── workflows/
@@ -130,7 +133,13 @@ The user's base resume is **not** part of the skill content — it is passed at 
 
 `llm_service.py` handles all Gemini calls. Agents call `llm_service.call(agent_name, user_prompt, gemini_api_key, skill_name, language)` and never interact with the API client directly.
 
-**Rate limit handling:** `llm_service.call()` automatically retries up to 3 times on a 429 response. It parses the suggested retry delay from the error message (`"Please retry in Xs"`) and waits that duration before retrying. Falls back to exponential backoff (30s → 60s → 120s) if the delay can't be parsed.
+**Rate limit handling:** `llm_service.call()` automatically retries up to 3 times on a 429 response. It parses the suggested retry delay from the error message (`"Please retry in Xs"`) and waits that duration before retrying. Falls back to exponential backoff (30s → 60s → 120s) if the delay can't be parsed. After all retries are exhausted, raises `GeminiQuotaExhaustedError`.
+
+**Typed LLM exceptions** — `llm_service.py` defines two custom exception classes that propagate to the orchestrator:
+- `GeminiQuotaExhaustedError` — raised when `ResourceExhausted` survives all retries (daily quota reached)
+- `GeminiInvalidKeyError` — raised immediately on `InvalidArgument`, `PermissionDenied`, or `Unauthenticated` (bad or revoked key)
+
+The orchestrator catches each type and stores a specific status on the generation record: `failed_quota`, `failed_key`, `failed_timeout` (5-minute hard timeout enforced by `asyncio.wait_for` in the background task wrapper), or `failed` (generic). The polling endpoint maps these to an `error_code` field in the response so the frontend can show the right Spanish message. Never catch these exceptions in agents — let them propagate to the orchestrator.
 
 ---
 
@@ -214,6 +223,10 @@ All resume generation goes through `orchestrator.py`. The flow is:
 ```
 
 The orchestrator logs each validation attempt and result to `logs_validation` via `logging_service.py`.
+
+**Validator result inference:** if the LLM response is valid JSON but omits the `"result"` key, the result is inferred from findings: empty findings → `PASS`, non-empty → `FAIL`. Never default to `FAIL` unconditionally (that was a bug that caused perpetual repair loops).
+
+**Repair agent experience fallback:** the `experience` field uses `data.get("experience") or fallback`, consistent with all other fields. This ensures that if the LLM returns `null` or `[]` for experience, the original experience is preserved rather than silently using an empty list.
 
 ---
 
@@ -396,3 +409,5 @@ ORDER BY created_at DESC;
 - Errors are caught at the orchestrator level — agents raise exceptions, orchestrator handles them
 - Write docstrings on all public functions
 - No hardcoded strings in agent prompts — system prompts come from skill files only
+- Generation `status` field values: `processing` | `completed` | `failed` | `failed_quota` | `failed_key` | `failed_timeout`. The polling endpoint normalises all `failed_*` variants to `status: "failed"` before sending to the frontend, and adds a separate `error_code` field.
+- Frontend error messages are always in Spanish. Use `showErrorHTML()` (not `showError()`) when the message includes a link.

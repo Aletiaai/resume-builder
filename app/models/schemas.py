@@ -85,6 +85,7 @@ class GenerationStatusResponse(BaseModel):
     download_url: Optional[str] = None
     has_flagged_sections: bool = False
     flagged_section_count: int = 0
+    error_code: Optional[str] = None  # quota_exhausted | invalid_api_key | timeout | unknown
 
 
 # ---------------------------------------------------------------------------
