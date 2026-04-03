@@ -16,6 +16,7 @@ from app.models.schemas import (
     GeminiKeyRequest,
     GeminiKeyResponse,
     LoginRequest,
+    ProfileRequest,
     RegisterRequest,
     TokenResponse,
     UserProfile,
@@ -160,6 +161,10 @@ async def get_me(
         except Exception:
             masked = "AIza...***"
 
+    resume_city = user.get("resume_city")
+    resume_phone = user.get("resume_phone")
+    resume_email = user.get("resume_email")
+
     profile = UserProfile(
         id=user["id"],
         email=user["email"],
@@ -168,6 +173,11 @@ async def get_me(
         has_gemini_key=has_key,
         gemini_key_masked=masked,
         base_resume_path=user.get("base_resume_path"),
+        resume_city=resume_city,
+        resume_phone=resume_phone,
+        resume_email=resume_email,
+        resume_linkedin=user.get("resume_linkedin"),
+        has_profile=bool(resume_city and resume_phone and resume_email),
     )
     return APIResponse(success=True, data=profile.model_dump())
 
@@ -208,6 +218,26 @@ async def save_gemini_key(
         success=True,
         data=GeminiKeyResponse(masked_key=_mask_key(body.api_key)).model_dump(),
     )
+
+
+@router.post("/profile", response_model=APIResponse)
+async def save_profile(
+    body: ProfileRequest,
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+):
+    """Save the user's resume contact information."""
+    user = await get_current_user(credentials, request)
+    supabase = request.app.state.supabase
+
+    supabase.table("users").update({
+        "resume_city": body.city.strip(),
+        "resume_phone": body.phone.strip(),
+        "resume_email": str(body.resume_email).strip(),
+        "resume_linkedin": body.linkedin_url.strip() if body.linkedin_url else None,
+    }).eq("id", user["id"]).execute()
+
+    return APIResponse(success=True, data={"saved": True})
 
 
 @router.get("/gemini-key", response_model=APIResponse)

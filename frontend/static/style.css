@@ -229,6 +229,10 @@ label {
 }
 label .hint { font-weight: 400; color: #9B97C2; font-size: 0.8rem; }
 .label-optional { font-weight: 400; color: #9B97C2; font-size: 0.8rem; }
+.field-note {
+  font-weight: 400; font-size: 0.8rem; color: #9B97C2;
+  margin-top: 0.35rem; line-height: 1.45;
+}
 
 input[type="email"],
 input[type="password"],

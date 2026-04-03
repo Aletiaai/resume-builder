@@ -48,6 +48,19 @@ class UserProfile(BaseModel):
     has_gemini_key: bool
     gemini_key_masked: Optional[str] = None
     base_resume_path: Optional[str] = None
+    # Profile / resume header fields
+    resume_city: Optional[str] = None
+    resume_phone: Optional[str] = None
+    resume_email: Optional[str] = None
+    resume_linkedin: Optional[str] = None
+    has_profile: bool = False  # True when city, phone, and resume_email are all set
+
+
+class ProfileRequest(BaseModel):
+    city: str
+    phone: str
+    resume_email: EmailStr
+    linkedin_url: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

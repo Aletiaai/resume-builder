@@ -104,6 +104,61 @@
     </section>
 
     <!-- ══════════════════════════════════════════
+         SCREEN 1.5: Profile — contact info
+    ═══════════════════════════════════════════ -->
+    <section id="screen-profile" class="screen hidden">
+      <div class="card">
+        <h2>Completa tu perfil</h2>
+        <p class="section-desc">
+          Esta información aparecerá en el encabezado de tu currículum.
+          Solo necesitas hacerlo una vez.
+        </p>
+
+        <form id="form-profile">
+          <label>Ciudad y país
+            <input
+              type="text"
+              id="profile-city"
+              placeholder="Ej. Ciudad de México, México"
+              required
+            />
+          </label>
+
+          <label>Teléfono con código de país
+            <input
+              type="tel"
+              id="profile-phone"
+              placeholder="Ej. +52 55 1234 5678"
+              required
+            />
+          </label>
+
+          <label>Correo en tu currículum
+            <input type="email" id="profile-resume-email" required />
+            <span class="field-note">
+              Usamos tu correo de registro. ¿Prefieres usar otro?
+              El currículum debe contener información profesional.
+            </span>
+          </label>
+
+          <label>LinkedIn <span class="label-optional">(opcional)</span>
+            <input
+              type="url"
+              id="profile-linkedin"
+              placeholder="https://linkedin.com/in/tu-perfil"
+            />
+          </label>
+
+          <button type="submit" id="btn-save-profile" class="btn btn-primary btn-full">
+            Guardar y continuar
+          </button>
+        </form>
+
+        <p id="profile-error" class="form-error hidden"></p>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════
          SCREEN 2: Upload base resume
     ═══════════════════════════════════════════ -->
     <section id="screen-upload" class="screen hidden">

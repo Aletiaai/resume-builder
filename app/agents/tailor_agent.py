@@ -31,15 +31,25 @@ async def tailor(
     original_resume_text: str,
     job_description: str,
     gemini_api_key: str,
+    contact_info: dict = None,
 ) -> tuple[TailoredResume, dict]:
     """Generate a tailored resume draft from the original resume and job description.
+
+    Args:
+        contact_info: Dict with keys city, phone, email, linkedin. Used verbatim
+            for the resume header — the model must not infer or modify these values.
 
     Returns:
         Tuple of (TailoredResume, usage_metadata dict).
     """
+    info = contact_info or {}
     user_prompt = TAILOR_USER_PROMPT_TEMPLATE.format(
         original_resume_text=original_resume_text,
         job_description=job_description,
+        contact_city=info.get("city", ""),
+        contact_phone=info.get("phone", ""),
+        contact_email=info.get("email", ""),
+        contact_linkedin=info.get("linkedin", "") or "",
     )
 
     raw_text, usage = await llm_service.call(

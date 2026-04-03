@@ -36,6 +36,7 @@ async def run(
     storage_svc: storage_service.StorageService,
     logging_svc: LoggingService,
     target_company: str = "",
+    contact_info: dict = None,
 ) -> dict:
     """Run the full resume generation pipeline.
 
@@ -59,6 +60,7 @@ async def run(
             original_resume_text=original_resume_text,
             job_description=job_description,
             gemini_api_key=gemini_api_key,
+            contact_info=contact_info or {},
         )
 
         # If the user supplied a company name, trust it over the model's extraction.

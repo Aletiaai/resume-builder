@@ -153,6 +153,11 @@ CREATE TABLE users (
     base_resume_path TEXT,
     referral_code TEXT,
     lemon_squeezy_customer_id TEXT,
+    -- Resume header / profile fields
+    resume_city TEXT,
+    resume_phone TEXT,
+    resume_email TEXT,
+    resume_linkedin TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_users_email ON users(email);
@@ -216,6 +221,16 @@ ALTER TABLE logs_llm_calls ENABLE ROW LEVEL SECURITY;
 ALTER TABLE logs_validation ENABLE ROW LEVEL SECURITY;
 ALTER TABLE logs_user_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE logs_billing ENABLE ROW LEVEL SECURITY;
+```
+
+**Existing database migration** — if the `users` table already exists, run this to add the profile columns:
+
+```sql
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS resume_city TEXT,
+  ADD COLUMN IF NOT EXISTS resume_phone TEXT,
+  ADD COLUMN IF NOT EXISTS resume_email TEXT,
+  ADD COLUMN IF NOT EXISTS resume_linkedin TEXT;
 ```
 
 Then in the **Supabase Dashboard → Storage**:
@@ -307,6 +322,7 @@ All endpoints return a standard envelope:
 | `GET` | `/auth/me` | Return the current user's profile. |
 | `POST` | `/auth/gemini-key` | Validate and save a Gemini API key (encrypted). |
 | `GET` | `/auth/gemini-key` | Return the masked key (e.g. `AIza...XyZ`). |
+| `POST` | `/auth/profile` | Save resume contact info (`city`, `phone`, `resume_email`, `linkedin_url`). Required before first generation. |
 
 ### Resume
 

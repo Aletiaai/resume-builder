@@ -401,6 +401,34 @@ ORDER BY created_at DESC;
 
 ---
 
+## Profile Completion & Contact Information
+
+Users must complete a profile step before their first generation. The profile collects the contact information used verbatim in the resume header. This appears after Gemini key setup and before the upload screen.
+
+**Screen order:** auth → gemini key → **profile** → upload → generate
+
+**Fields collected (`users` table columns):**
+- `resume_city` — city and country (e.g. "Ciudad de México, México") — required
+- `resume_phone` — phone with country code (e.g. "+52 55 1234 5678") — required
+- `resume_email` — email for the resume header; pre-filled with account email — required
+- `resume_linkedin` — LinkedIn profile URL — optional
+
+**Gate:** `_check_generation_gate` in `resume.py` blocks generation if any required field is missing, returning HTTP 403. The frontend redirects to `screen-profile`.
+
+**Contact info in the tailor agent:** `resume.py` extracts the 4 fields from the user record and passes them as `contact_info` to the orchestrator → tailor agent. The `TAILOR_USER_PROMPT_TEMPLATE` injects them as authoritative values and explicitly instructs the model to copy them verbatim into `contact_line` — never infer from the original resume.
+
+**Validator bypass:** `VALIDATOR_USER_PROMPT_TEMPLATE` includes an explicit instruction not to validate or flag the `contact_line` field, since it comes from verified profile data rather than the uploaded resume.
+
+**`has_profile` flag:** computed in `GET /auth/me` as `bool(city and phone and resume_email)`. The frontend uses this to decide whether to show `screen-profile` during bootstrap.
+
+---
+
+## Future Improvements
+
+**LinkedIn URL as validator cross-reference:** The user's LinkedIn URL is collected during profile completion and stored in `users.resume_linkedin`. A future improvement is to use this URL to cross-reference the user's real job titles, companies, and dates against what the tailor agent generates — adding an additional validation layer beyond comparing against the uploaded base resume. This would require fetching and parsing the LinkedIn profile at generation time, which has rate limiting and authentication considerations to solve first.
+
+---
+
 ## Code Conventions
 
 - All endpoints return JSON with consistent shape: `{ success: bool, data: any, error: str | null }`

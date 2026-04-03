@@ -45,6 +45,11 @@ def _check_generation_gate(user: dict) -> None:
             status_code=403,
             detail="Debes guardar tu API key de Gemini antes de generar un currículum.",
         )
+    if not (user.get("resume_city") and user.get("resume_phone") and user.get("resume_email")):
+        raise HTTPException(
+            status_code=403,
+            detail="Completa tu perfil de contacto antes de generar un currículum.",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +139,13 @@ async def generate_resume(
 
     generation_id = gen_result.data[0]["id"]
 
+    contact_info = {
+        "city": user.get("resume_city", ""),
+        "phone": user.get("resume_phone", ""),
+        "email": user.get("resume_email", ""),
+        "linkedin": user.get("resume_linkedin", ""),
+    }
+
     # Run orchestration as background task
     background_tasks.add_task(
         _run_orchestrator,
@@ -143,6 +155,7 @@ async def generate_resume(
         job_description=body.job_description,
         target_company=body.target_company,
         gemini_api_key=gemini_api_key,
+        contact_info=contact_info,
         supabase_client=supabase,
         storage_svc=storage_svc,
         logging_svc=logging_svc,

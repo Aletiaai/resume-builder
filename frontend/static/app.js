@@ -38,7 +38,7 @@ async function apiFetch(path, options = {}) {
 }
 
 // ── Screens ──
-const SCREENS = ["screen-auth", "screen-gemini", "screen-upload", "screen-generate", "screen-result", "screen-paywall"];
+const SCREENS = ["screen-auth", "screen-gemini", "screen-profile", "screen-upload", "screen-generate", "screen-result", "screen-paywall"];
 
 function showScreen(screenId) {
   SCREENS.forEach((id) => {
@@ -77,6 +77,12 @@ async function bootstrap() {
   // Route to correct screen
   if (!currentUser.has_gemini_key) {
     showScreen("screen-gemini");
+    return;
+  }
+
+  if (!currentUser.has_profile) {
+    prefillProfileForm();
+    showScreen("screen-profile");
     return;
   }
 
@@ -183,6 +189,55 @@ $("btn-save-key").addEventListener("click", async () => {
   }
 });
 
+// ── Profile ──
+function prefillProfileForm() {
+  if (!currentUser) return;
+  $("profile-resume-email").value = currentUser.resume_email || currentUser.email || "";
+  if (currentUser.resume_city) $("profile-city").value = currentUser.resume_city;
+  if (currentUser.resume_phone) $("profile-phone").value = currentUser.resume_phone;
+  if (currentUser.resume_linkedin) $("profile-linkedin").value = currentUser.resume_linkedin;
+}
+
+$("form-profile").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  clearError("profile-error");
+
+  const btn = $("btn-save-profile");
+  btn.disabled = true;
+  btn.textContent = "Guardando…";
+
+  const res = await apiFetch("/auth/profile", {
+    method: "POST",
+    body: JSON.stringify({
+      city: $("profile-city").value.trim(),
+      phone: $("profile-phone").value.trim(),
+      resume_email: $("profile-resume-email").value.trim(),
+      linkedin_url: $("profile-linkedin").value.trim() || null,
+    }),
+  });
+
+  btn.disabled = false;
+  btn.textContent = "Guardar y continuar";
+
+  if (res.success) {
+    currentUser.has_profile = true;
+    currentUser.resume_city = $("profile-city").value.trim();
+    currentUser.resume_phone = $("profile-phone").value.trim();
+    currentUser.resume_email = $("profile-resume-email").value.trim();
+    currentUser.resume_linkedin = $("profile-linkedin").value.trim() || null;
+
+    if (!baseResumePath) {
+      showScreen("screen-upload");
+    } else {
+      $("resume-file-name").textContent = baseResumePath.split("/").pop();
+      show("resume-file-info");
+      showScreen("screen-generate");
+    }
+  } else {
+    showError("profile-error", res.error || "Error al guardar el perfil. Intenta de nuevo.");
+  }
+});
+
 // ── Upload ──
 const fileInput = $("resume-file");
 fileInput.addEventListener("change", () => {
@@ -258,6 +313,9 @@ $("btn-generate").addEventListener("click", async () => {
       showScreen("screen-paywall");
     } else if (res.error && res.error.includes("API key de Gemini")) {
       showErrorHTML("generate-error", "Necesitas configurar tu API key de Gemini antes de generar. " + _SETTINGS_LINK);
+    } else if (res.error && res.error.includes("perfil de contacto")) {
+      prefillProfileForm();
+      showScreen("screen-profile");
     } else {
       showError("generate-error", res.error || "Error al generar el currículum.");
     }
