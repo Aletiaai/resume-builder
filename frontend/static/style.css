@@ -237,6 +237,8 @@ label .hint { font-weight: 400; color: #9B97C2; font-size: 0.8rem; }
 input[type="email"],
 input[type="password"],
 input[type="text"],
+input[type="tel"],
+input[type="url"],
 textarea {
   padding: 0.7rem 1rem;
   background: rgba(255,255,255,0.06);
