@@ -401,13 +401,17 @@ function startPolling(generationId) {
   clearInterval(pollingInterval);
   let consecutiveFailures = 0;
   let totalPolls = 0;
+  let isPollPending = false;  // prevents overlapping concurrent requests
   const MAX_POLL_FAILURES = 12;  // 12 × 5s = 60s of consecutive failures before giving up
   const MAX_TOTAL_POLLS = 120;   // 120 × 5s = 10 min total ceiling
 
   pollingInterval = setInterval(async () => {
+    if (isPollPending) return;  // previous request still in flight — skip this tick
+    isPollPending = true;
     totalPolls++;
 
     if (totalPolls > MAX_TOTAL_POLLS) {
+      isPollPending = false;
       clearInterval(pollingInterval);
       pollingInterval = null;
       $("btn-generate").disabled = false;
@@ -417,6 +421,7 @@ function startPolling(generationId) {
     }
 
     const res = await apiFetch(`/resume/generation/${generationId}`);
+    isPollPending = false;
 
     if (!res.success) {
       consecutiveFailures++;
@@ -430,6 +435,7 @@ function startPolling(generationId) {
       return;
     }
 
+    // Successful response — reset the failure window regardless of generation status.
     consecutiveFailures = 0;
     const gen = res.data;
 
