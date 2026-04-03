@@ -154,6 +154,8 @@ CREATE TABLE users (
     referral_code TEXT,
     lemon_squeezy_customer_id TEXT,
     -- Resume header / profile fields
+    resume_first_name TEXT,
+    resume_last_name TEXT,
     resume_city TEXT,
     resume_phone TEXT,
     resume_email TEXT,
@@ -227,6 +229,8 @@ ALTER TABLE logs_billing ENABLE ROW LEVEL SECURITY;
 
 ```sql
 ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS resume_first_name TEXT,
+  ADD COLUMN IF NOT EXISTS resume_last_name TEXT,
   ADD COLUMN IF NOT EXISTS resume_city TEXT,
   ADD COLUMN IF NOT EXISTS resume_phone TEXT,
   ADD COLUMN IF NOT EXISTS resume_email TEXT,

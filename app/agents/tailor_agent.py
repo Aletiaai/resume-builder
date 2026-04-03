@@ -46,6 +46,8 @@ async def tailor(
     user_prompt = TAILOR_USER_PROMPT_TEMPLATE.format(
         original_resume_text=original_resume_text,
         job_description=job_description,
+        contact_first_name=info.get("first_name", ""),
+        contact_last_name=info.get("last_name", ""),
         contact_city=info.get("city", ""),
         contact_phone=info.get("phone", ""),
         contact_email=info.get("email", ""),
@@ -60,7 +62,14 @@ async def tailor(
     )
 
     json_str = _extract_json(raw_text)
-    data = json.loads(json_str)
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError as exc:
+        logger.error(
+            f"[tailor_agent] Failed to parse JSON response: {exc} | "
+            f"First 500 chars: {raw_text[:500]!r}"
+        )
+        raise RuntimeError(f"El modelo devolvió una respuesta con formato inválido.") from exc
 
     # Parse experience entries
     experience = [

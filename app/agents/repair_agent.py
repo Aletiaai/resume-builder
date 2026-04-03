@@ -63,7 +63,14 @@ async def repair(
     )
 
     json_str = _extract_json(raw_text)
-    data = json.loads(json_str)
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError as exc:
+        logger.error(
+            f"[repair_agent] Failed to parse JSON response: {exc} | "
+            f"First 500 chars: {raw_text[:500]!r}"
+        )
+        raise RuntimeError("El modelo devolvió una respuesta con formato inválido.") from exc
 
     experience = [
         ExperienceEntry(

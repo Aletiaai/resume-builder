@@ -63,6 +63,14 @@ async def run(
             contact_info=contact_info or {},
         )
 
+        # Always override the candidate name with authoritative profile data.
+        # Never trust the model's inference — it may read a different name from the base resume.
+        _info = contact_info or {}
+        first = _info.get("first_name", "").strip()
+        last = _info.get("last_name", "").strip()
+        if first or last:
+            tailored_resume.candidate_name = f"{first} {last}".strip()
+
         # If the user supplied a company name, trust it over the model's extraction.
         # If neither the user nor the model produced one, keep empty — docx_service
         # will fall back to 'XX' in the filename.

@@ -11,16 +11,17 @@ This file contains only the user-turn prompt templates.
 TAILOR_USER_PROMPT_TEMPLATE = """
 You are activating the resume-tailor skill. Follow its instructions exactly.
 
-## Contact Information (AUTHORITATIVE — copy verbatim into contact_line, do not infer or modify)
+## Candidate Identity & Contact (AUTHORITATIVE — copy verbatim, never infer or modify)
+First Name: {contact_first_name}
+Last Name: {contact_last_name}
 City: {contact_city}
 Phone: {contact_phone}
 Email: {contact_email}
 LinkedIn: {contact_linkedin}
 
-Assemble `contact_line` using only these values in this order:
-  City | Phone | Email | LinkedIn (omit LinkedIn if empty)
-Do NOT add, remove, or alter any contact detail. Never use values from the original resume
-for the contact_line — the fields above are always correct.
+- Set `candidate_name` to exactly "{contact_first_name} {contact_last_name}". Do NOT use any name found in the original resume or job description.
+- Assemble `contact_line` using only City, Phone, Email, and LinkedIn (omit LinkedIn if empty), in that order, separated by " | ".
+- Do NOT add, remove, or alter any of these values.
 
 ## Original Resume (source of truth for experience, skills, and education)
 {original_resume_text}
@@ -72,7 +73,7 @@ No prose before or after the JSON.
 
 ## Output Constraints
 - `original_text` must always be a non-empty string. If you cannot locate the exact original text, use the string "NOT FOUND IN ORIGINAL" — never null, never omit the field.
-- Do NOT validate or flag the `contact_line` field. It is populated from verified user profile data, not from the original resume, and is always correct.
+- Do NOT validate or flag `candidate_name` or `contact_line`. Both are populated from verified user profile data, not from the original resume, and are always correct.
 """
 
 # ---------------------------------------------------------------------------

@@ -77,7 +77,11 @@ async def get_current_user(
     """Dependency: decode JWT and return the user row from DB."""
     user_id = _decode_token(credentials.credentials)
     supabase = request.app.state.supabase
-    result = supabase.table("users").select("*").eq("id", user_id).single().execute()
+    try:
+        result = supabase.table("users").select("*").eq("id", user_id).single().execute()
+    except Exception as exc:
+        logger.error(f"get_current_user: DB query failed for user {user_id}: {exc}")
+        raise HTTPException(status_code=503, detail="Error al verificar tu sesión. Intenta de nuevo.")
     if not result.data:
         raise HTTPException(status_code=401, detail="Usuario no encontrado.")
     return result.data
@@ -100,18 +104,26 @@ async def register(body: RegisterRequest, request: Request):
     supabase = request.app.state.supabase
     ref_code = request.query_params.get("aff")
 
-    # Check if email already exists
-    existing = supabase.table("users").select("id").eq("email", body.email).execute()
+    try:
+        existing = supabase.table("users").select("id").eq("email", body.email).execute()
+    except Exception as exc:
+        logger.error(f"register: email check failed: {exc}")
+        return APIResponse(success=False, error="Error al verificar el correo. Intenta de nuevo.")
+
     if existing.data:
         return APIResponse(success=False, error="Este correo ya está registrado.")
 
     password_hash = _hash_password(body.password)
-    result = supabase.table("users").insert({
-        "email": body.email,
-        "password_hash": password_hash,
-        "tier": "free_trial",
-        "referral_code": ref_code,
-    }).execute()
+    try:
+        result = supabase.table("users").insert({
+            "email": body.email,
+            "password_hash": password_hash,
+            "tier": "free_trial",
+            "referral_code": ref_code,
+        }).execute()
+    except Exception as exc:
+        logger.error(f"register: insert failed: {exc}")
+        return APIResponse(success=False, error="Error al crear la cuenta. Intenta de nuevo.")
 
     if not result.data:
         return APIResponse(success=False, error="Error al crear la cuenta.")
@@ -129,7 +141,12 @@ async def login(body: LoginRequest, request: Request):
     """Authenticate user and return JWT."""
     supabase = request.app.state.supabase
 
-    result = supabase.table("users").select("*").eq("email", body.email).single().execute()
+    try:
+        result = supabase.table("users").select("*").eq("email", body.email).single().execute()
+    except Exception as exc:
+        logger.error(f"login: DB query failed: {exc}")
+        return APIResponse(success=False, error="Error al iniciar sesión. Intenta de nuevo.")
+
     if not result.data:
         return APIResponse(success=False, error="Credenciales incorrectas.")
 
@@ -161,6 +178,8 @@ async def get_me(
         except Exception:
             masked = "AIza...***"
 
+    resume_first_name = user.get("resume_first_name")
+    resume_last_name = user.get("resume_last_name")
     resume_city = user.get("resume_city")
     resume_phone = user.get("resume_phone")
     resume_email = user.get("resume_email")
@@ -173,11 +192,16 @@ async def get_me(
         has_gemini_key=has_key,
         gemini_key_masked=masked,
         base_resume_path=user.get("base_resume_path"),
+        resume_first_name=resume_first_name,
+        resume_last_name=resume_last_name,
         resume_city=resume_city,
         resume_phone=resume_phone,
         resume_email=resume_email,
         resume_linkedin=user.get("resume_linkedin"),
-        has_profile=bool(resume_city and resume_phone and resume_email),
+        has_profile=bool(
+            resume_first_name and resume_last_name
+            and resume_city and resume_phone and resume_email
+        ),
     )
     return APIResponse(success=True, data=profile.model_dump())
 
@@ -204,9 +228,13 @@ async def save_gemini_key(
     fernet = _get_fernet()
     encrypted = fernet.encrypt(body.api_key.encode()).decode()
 
-    supabase.table("users").update({
-        "gemini_api_key_encrypted": encrypted,
-    }).eq("id", user["id"]).execute()
+    try:
+        supabase.table("users").update({
+            "gemini_api_key_encrypted": encrypted,
+        }).eq("id", user["id"]).execute()
+    except Exception as exc:
+        logger.error(f"save_gemini_key: DB update failed for user {user['id']}: {exc}")
+        return APIResponse(success=False, error="Error al guardar la API key. Intenta de nuevo.")
 
     await logging_svc.log_user_event(
         user_id=user["id"],
@@ -230,12 +258,18 @@ async def save_profile(
     user = await get_current_user(credentials, request)
     supabase = request.app.state.supabase
 
-    supabase.table("users").update({
-        "resume_city": body.city.strip(),
-        "resume_phone": body.phone.strip(),
-        "resume_email": str(body.resume_email).strip(),
-        "resume_linkedin": body.linkedin_url.strip() if body.linkedin_url else None,
-    }).eq("id", user["id"]).execute()
+    try:
+        supabase.table("users").update({
+            "resume_first_name": body.first_name.strip(),
+            "resume_last_name": body.last_name.strip(),
+            "resume_city": body.city.strip(),
+            "resume_phone": body.phone.strip(),
+            "resume_email": str(body.resume_email).strip(),
+            "resume_linkedin": body.linkedin_url.strip() if body.linkedin_url else None,
+        }).eq("id", user["id"]).execute()
+    except Exception as exc:
+        logger.error(f"save_profile: DB update failed for user {user['id']}: {exc}")
+        return APIResponse(success=False, error="Error al guardar el perfil. Intenta de nuevo.")
 
     return APIResponse(success=True, data={"saved": True})
 

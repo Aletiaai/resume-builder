@@ -45,7 +45,10 @@ def _check_generation_gate(user: dict) -> None:
             status_code=403,
             detail="Debes guardar tu API key de Gemini antes de generar un currículum.",
         )
-    if not (user.get("resume_city") and user.get("resume_phone") and user.get("resume_email")):
+    if not (
+        user.get("resume_first_name") and user.get("resume_last_name")
+        and user.get("resume_city") and user.get("resume_phone") and user.get("resume_email")
+    ):
         raise HTTPException(
             status_code=403,
             detail="Completa tu perfil de contacto antes de generar un currículum.",
@@ -75,15 +78,22 @@ async def upload_resume(
         return APIResponse(success=False, error="El archivo es demasiado grande (máx. 10 MB).")
 
     filename = f"base-resume-{user['id']}.docx"
-    file_path = await storage_svc.upload_resume(
-        user_id=user["id"],
-        file_bytes=file_bytes,
-        filename=filename,
-    )
+    try:
+        file_path = await storage_svc.upload_resume(
+            user_id=user["id"],
+            file_bytes=file_bytes,
+            filename=filename,
+        )
+    except Exception as exc:
+        logger.error(f"upload_resume: storage upload failed for user {user['id']}: {exc}")
+        return APIResponse(success=False, error="Error al subir el archivo. Intenta de nuevo.")
 
     # Persist the path on the user record so it survives logout/login
     supabase = request.app.state.supabase
-    supabase.table("users").update({"base_resume_path": file_path}).eq("id", user["id"]).execute()
+    try:
+        supabase.table("users").update({"base_resume_path": file_path}).eq("id", user["id"]).execute()
+    except Exception as exc:
+        logger.error(f"upload_resume: failed to persist base_resume_path for user {user['id']}: {exc}")
 
     await logging_svc.log_user_event(
         user_id=user["id"],
@@ -128,11 +138,15 @@ async def generate_resume(
         return APIResponse(success=False, error="No se pudo leer el currículum base.")
 
     # Create a generation record
-    gen_result = supabase.table("generations").insert({
-        "user_id": user["id"],
-        "status": "processing",
-        "job_description": body.job_description,
-    }).execute()
+    try:
+        gen_result = supabase.table("generations").insert({
+            "user_id": user["id"],
+            "status": "processing",
+            "job_description": body.job_description,
+        }).execute()
+    except Exception as exc:
+        logger.error(f"generate_resume: failed to create generation record for user {user['id']}: {exc}")
+        return APIResponse(success=False, error="Error al iniciar la generación. Intenta de nuevo.")
 
     if not gen_result.data:
         return APIResponse(success=False, error="Error al iniciar la generación.")
@@ -140,6 +154,8 @@ async def generate_resume(
     generation_id = gen_result.data[0]["id"]
 
     contact_info = {
+        "first_name": user.get("resume_first_name", ""),
+        "last_name": user.get("resume_last_name", ""),
         "city": user.get("resume_city", ""),
         "phone": user.get("resume_phone", ""),
         "email": user.get("resume_email", ""),
@@ -179,9 +195,13 @@ async def get_generation_status(
     storage_svc: StorageService = request.app.state.storage_svc
     logging_svc: LoggingService = request.app.state.logging_svc
 
-    result = supabase.table("generations").select("*").eq("id", generation_id).eq(
-        "user_id", user["id"]
-    ).single().execute()
+    try:
+        result = supabase.table("generations").select("*").eq("id", generation_id).eq(
+            "user_id", user["id"]
+        ).single().execute()
+    except Exception as exc:
+        logger.error(f"get_generation_status: DB query failed for generation {generation_id}: {exc}")
+        raise HTTPException(status_code=503, detail="Error al consultar el estado. Intenta de nuevo.")
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Generación no encontrada.")
@@ -197,9 +217,12 @@ async def get_generation_status(
 
         # Mark free trial as used the first time the completed file is served
         if user["tier"] == "free_trial" and not user.get("free_trial_used"):
-            supabase.table("users").update({
-                "free_trial_used": True,
-            }).eq("id", user["id"]).execute()
+            try:
+                supabase.table("users").update({
+                    "free_trial_used": True,
+                }).eq("id", user["id"]).execute()
+            except Exception as exc:
+                logger.error(f"get_generation_status: failed to mark free_trial_used for user {user['id']}: {exc}")
 
         # Log download event (only once — could track this more precisely)
         await logging_svc.log_user_event(

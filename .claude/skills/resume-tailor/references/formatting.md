@@ -1,7 +1,6 @@
 # Resume Formatting Specification
 
 This file defines the exact visual formatting for all resume .docx files produced by this skill.
-Extracted from Marco García's resume as the canonical template.
 
 ---
 
@@ -263,15 +262,15 @@ The generated document is returned as bytes and stored in Supabase Storage — n
 
 | Component | Rule | Example |
 |-----------|------|---------|
-| First + Last name | Capitalized, hyphen-separated | `Marco-Garcia` |
+| First + Last name | Capitalized, hyphen-separated | `Juan-Perez` |
 | Month | 3-letter abbreviation, capitalized | `Mar`, `Apr`, `Jan` |
 | Year | 2-digit year | `26`, `27` |
 | Company code | First 2 letters of target company name, capitalized | `Go` for Google, `An` for Anthropic |
 
 **Full examples:**
-- Applying to Google in March 2026 → `Marco-Garcia-resume-Mar26-Go.docx`
-- Applying to Anthropic in November 2027 → `Marco-Garcia-resume-Nov27-An.docx`
-- Applying to OpenAI in January 2026 → `Marco-Garcia-resume-Jan26-Op.docx`
+- Applying to Google in March 2026 → `Juan-Perez-resume-Mar26-Go.docx`
+- Applying to Anthropic in November 2027 → `Juan-Perez-resume-Nov27-An.docx`
+- Applying to OpenAI in January 2026 → `Juan-Perez-resume-Jan26-Op.docx`
 
 
 ---
@@ -282,12 +281,12 @@ The generated document is returned as bytes and stored in Supabase Storage — n
 
 | Component | Rule | Example |
 |-----------|------|---------|
-| First + Last name | Capitalized, hyphen-separated | `Marco-Garcia` |
+| First + Last name | Capitalized, hyphen-separated | `Juan-Perez` |
 | Month | 3-letter abbreviation in Spanish, capitalized | `Mar`, `Abr`, `Ene` |
 | Year | 2-digit year | `26`, `27` |
 | Company code | First 2 letters of target company name, capitalized | `Go` for Google, `An` for Anthropic |
 
 **Full examples:**
-- Applying to Google in March 2026 → `Marco-Garcia-CV-Mar26-Go.docx`
-- Applying to Anthropic in April 2027 → `Marco-Garcia-CV-Abr27-An.docx`
-- Applying to OpenAI in January 2026 → `Marco-Garcia-CV-Ene26-Op.docx`
+- Applying to Google in March 2026 → `Juan-Perez-CV-Mar26-Go.docx`
+- Applying to Anthropic in April 2027 → `Juan-Perez-CV-Abr27-An.docx`
+- Applying to OpenAI in January 2026 → `Juan-Perez-CV-Ene26-Op.docx`

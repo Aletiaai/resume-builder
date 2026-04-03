@@ -25,16 +25,37 @@ const showErrorHTML = (id, html) => { const el = $(id); if (el) { el.innerHTML =
 const clearError = (id) => { const el = $(id); if (el) { el.textContent = ""; el.classList.add("hidden"); } };
 
 // ── API helper ──
+const _FETCH_TIMEOUT_MS = 30000;
+
 async function apiFetch(path, options = {}) {
-  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(API + path, { ...options, headers });
-  const data = await res.json();
-  // Normalize FastAPI HTTPException format {"detail": "..."} to app format
-  if (!res.ok && data.detail !== undefined && !("success" in data)) {
-    return { success: false, error: data.detail };
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), _FETCH_TIMEOUT_MS);
+
+  try {
+    const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(API + path, { ...options, headers, signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      return { success: false, error: "El servidor devolvió una respuesta inválida. Intenta de nuevo." };
+    }
+
+    // Normalize FastAPI HTTPException format {"detail": "..."} to app format
+    if (!res.ok && data.detail !== undefined && !("success" in data)) {
+      return { success: false, error: data.detail };
+    }
+    return data;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") {
+      return { success: false, error: "La solicitud tardó demasiado tiempo. Verifica tu conexión e intenta de nuevo." };
+    }
+    return { success: false, error: "Error de conexión. Verifica tu internet e intenta de nuevo." };
   }
-  return data;
 }
 
 // ── Screens ──
@@ -60,7 +81,18 @@ async function bootstrap() {
 
   const res = await apiFetch("/auth/me");
   if (!res.success) {
-    logout();
+    // Only clear the session on a definitive auth rejection (bad/expired token).
+    // A network or server error should not log the user out.
+    const isAuthError = res.error && (
+      res.error.includes("Token") ||
+      res.error.includes("sesión") ||
+      res.error.includes("no encontrado")
+    );
+    if (isAuthError) {
+      logout();
+    } else {
+      showScreen("screen-auth");
+    }
     return;
   }
 
@@ -192,9 +224,11 @@ $("btn-save-key").addEventListener("click", async () => {
 // ── Profile ──
 function prefillProfileForm() {
   if (!currentUser) return;
-  $("profile-resume-email").value = currentUser.resume_email || currentUser.email || "";
+  if (currentUser.resume_first_name) $("profile-first-name").value = currentUser.resume_first_name;
+  if (currentUser.resume_last_name) $("profile-last-name").value = currentUser.resume_last_name;
   if (currentUser.resume_city) $("profile-city").value = currentUser.resume_city;
   if (currentUser.resume_phone) $("profile-phone").value = currentUser.resume_phone;
+  $("profile-resume-email").value = currentUser.resume_email || currentUser.email || "";
   if (currentUser.resume_linkedin) $("profile-linkedin").value = currentUser.resume_linkedin;
 }
 
@@ -209,6 +243,8 @@ $("form-profile").addEventListener("submit", async (e) => {
   const res = await apiFetch("/auth/profile", {
     method: "POST",
     body: JSON.stringify({
+      first_name: $("profile-first-name").value.trim(),
+      last_name: $("profile-last-name").value.trim(),
       city: $("profile-city").value.trim(),
       phone: $("profile-phone").value.trim(),
       resume_email: $("profile-resume-email").value.trim(),
@@ -221,6 +257,8 @@ $("form-profile").addEventListener("submit", async (e) => {
 
   if (res.success) {
     currentUser.has_profile = true;
+    currentUser.resume_first_name = $("profile-first-name").value.trim();
+    currentUser.resume_last_name = $("profile-last-name").value.trim();
     currentUser.resume_city = $("profile-city").value.trim();
     currentUser.resume_phone = $("profile-phone").value.trim();
     currentUser.resume_email = $("profile-resume-email").value.trim();
@@ -262,11 +300,27 @@ $("btn-upload").addEventListener("click", async () => {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(API + "/resume/upload", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: formData,
-  }).then((r) => r.json());
+  let res;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), _FETCH_TIMEOUT_MS);
+    const raw = await fetch(API + "/resume/upload", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    res = await raw.json();
+  } catch (err) {
+    $("btn-upload").disabled = false;
+    $("btn-upload").textContent = "Subir currículum";
+    showError("upload-error", err.name === "AbortError"
+      ? "La subida tardó demasiado tiempo. Intenta de nuevo."
+      : "Error de conexión al subir el archivo. Verifica tu internet e intenta de nuevo."
+    );
+    return;
+  }
 
   $("btn-upload").disabled = false;
   $("btn-upload").textContent = "Subir currículum";
@@ -343,10 +397,24 @@ function _generationErrorMessage(errorCode) {
 
 function startPolling(generationId) {
   clearInterval(pollingInterval);
+  let consecutiveFailures = 0;
+  const MAX_POLL_FAILURES = 5;
+
   pollingInterval = setInterval(async () => {
     const res = await apiFetch(`/resume/generation/${generationId}`);
-    if (!res.success) return;
 
+    if (!res.success) {
+      consecutiveFailures++;
+      if (consecutiveFailures >= MAX_POLL_FAILURES) {
+        clearInterval(pollingInterval);
+        $("btn-generate").disabled = false;
+        hide("generating-spinner");
+        showError("generate-error", "No se pudo verificar el estado de tu currículum. Verifica tu conexión e intenta de nuevo.");
+      }
+      return;
+    }
+
+    consecutiveFailures = 0;
     const gen = res.data;
     if (gen.status === "processing") return;  // still running
 
