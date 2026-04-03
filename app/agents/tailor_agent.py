@@ -16,14 +16,29 @@ logger = logging.getLogger(__name__)
 
 SKILL_NAME = "resume-tailor"
 
+# One automatic retry when the model returns malformed JSON.
+# Without a valid resume there is nothing to deliver, so a single retry is
+# preferable to failing immediately on what is often a transient formatting issue.
+_MAX_PARSE_RETRIES = 1
 
-def _extract_json(text: str) -> str:
-    """Strip any markdown code fences and return the raw JSON string."""
+
+def _clean_json(text: str) -> str:
+    """Clean a raw LLM response to extract a parseable JSON object.
+
+    Steps applied in order:
+    1. Strip markdown code fences (```json ... ``` or ``` ... ```)
+    2. Extract the outermost { ... } block to discard prose before/after
+    3. Remove trailing commas before } or ] (common Gemini formatting mistake)
+    """
     text = text.strip()
-    # Remove ```json ... ``` or ``` ... ```
-    match = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
-    if match:
-        return match.group(1)
+    fenced = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
+    if fenced:
+        text = fenced.group(1).strip()
+    obj_match = re.search(r'\{[\s\S]*\}', text)
+    if obj_match:
+        text = obj_match.group(0)
+    # Fix trailing commas: e.g.  ["a", "b",] or {"k": "v",}
+    text = re.sub(r',(\s*[}\]])', r'\1', text)
     return text
 
 
@@ -54,22 +69,36 @@ async def tailor(
         contact_linkedin=info.get("linkedin", "") or "",
     )
 
-    raw_text, usage = await llm_service.call(
-        agent_name="tailor_agent",
-        user_prompt=user_prompt,
-        gemini_api_key=gemini_api_key,
-        skill_name=SKILL_NAME,
-    )
+    data = None
+    usage = {}
+    last_exc = None
+    last_raw = ""
 
-    json_str = _extract_json(raw_text)
-    try:
-        data = json.loads(json_str)
-    except json.JSONDecodeError as exc:
-        logger.error(
-            f"[tailor_agent] Failed to parse JSON response: {exc} | "
-            f"First 500 chars: {raw_text[:500]!r}"
+    for attempt in range(_MAX_PARSE_RETRIES + 1):
+        raw_text, usage = await llm_service.call(
+            agent_name="tailor_agent",
+            user_prompt=user_prompt,
+            gemini_api_key=gemini_api_key,
+            skill_name=SKILL_NAME,
         )
-        raise RuntimeError(f"El modelo devolvió una respuesta con formato inválido.") from exc
+        json_str = _clean_json(raw_text)
+        try:
+            data = json.loads(json_str)
+            break  # parsed successfully
+        except json.JSONDecodeError as exc:
+            last_exc = exc
+            last_raw = raw_text
+            if attempt < _MAX_PARSE_RETRIES:
+                logger.warning(
+                    f"[tailor_agent] Malformed JSON on attempt {attempt + 1} — retrying. "
+                    f"Error: {exc} | First 200 chars: {raw_text[:200]!r}"
+                )
+            else:
+                logger.error(
+                    f"[tailor_agent] Failed to parse JSON after {_MAX_PARSE_RETRIES + 1} "
+                    f"attempt(s): {exc} | First 500 chars: {last_raw[:500]!r}"
+                )
+                raise RuntimeError("El modelo devolvió una respuesta con formato inválido.") from exc
 
     # Parse experience entries
     experience = [
