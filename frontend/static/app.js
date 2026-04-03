@@ -401,14 +401,15 @@ function startPolling(generationId) {
   clearInterval(pollingInterval);
   let consecutiveFailures = 0;
   let totalPolls = 0;
-  const MAX_POLL_FAILURES = 5;
-  const MAX_TOTAL_POLLS = 120;  // 120 × 5s = 10 min
+  const MAX_POLL_FAILURES = 12;  // 12 × 5s = 60s of consecutive failures before giving up
+  const MAX_TOTAL_POLLS = 120;   // 120 × 5s = 10 min total ceiling
 
   pollingInterval = setInterval(async () => {
     totalPolls++;
 
     if (totalPolls > MAX_TOTAL_POLLS) {
       clearInterval(pollingInterval);
+      pollingInterval = null;
       $("btn-generate").disabled = false;
       hide("generating-spinner");
       showError("generate-error", "La generación está tardando más de lo esperado. Tu currículum puede estar listo en unos minutos — recarga la página para verificar.");
@@ -421,6 +422,7 @@ function startPolling(generationId) {
       consecutiveFailures++;
       if (consecutiveFailures >= MAX_POLL_FAILURES) {
         clearInterval(pollingInterval);
+        pollingInterval = null;
         $("btn-generate").disabled = false;
         hide("generating-spinner");
         showError("generate-error", "No se pudo verificar el estado de tu currículum. Verifica tu conexión e intenta de nuevo.");
@@ -433,6 +435,7 @@ function startPolling(generationId) {
     if (gen.status === "processing") return;  // still running
 
     clearInterval(pollingInterval);
+    pollingInterval = null;
     $("btn-generate").disabled = false;
     hide("generating-spinner");
 
