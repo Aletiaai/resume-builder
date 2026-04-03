@@ -384,8 +384,10 @@ const _SETTINGS_LINK = '<a href="#" onclick="showScreen(\'screen-gemini\'); retu
 
 function _generationErrorMessage(errorCode) {
   switch (errorCode) {
-    case "quota_exhausted":
+    case "quota_daily":
       return "Alcanzaste el límite diario de tu API key de Gemini. Google restablece las cuotas gratuitas cada día a medianoche (hora del Pacífico). Vuelve a intentarlo mañana.";
+    case "quota_exhausted":
+      return "Tu API key de Gemini alcanzó el límite de solicitudes por minuto. Espera unos minutos e intenta de nuevo.";
     case "invalid_api_key":
       return "Tu API key de Gemini no es válida o fue revocada. " + _SETTINGS_LINK;
     case "timeout":
@@ -398,9 +400,21 @@ function _generationErrorMessage(errorCode) {
 function startPolling(generationId) {
   clearInterval(pollingInterval);
   let consecutiveFailures = 0;
+  let totalPolls = 0;
   const MAX_POLL_FAILURES = 5;
+  const MAX_TOTAL_POLLS = 120;  // 120 × 5s = 10 min
 
   pollingInterval = setInterval(async () => {
+    totalPolls++;
+
+    if (totalPolls > MAX_TOTAL_POLLS) {
+      clearInterval(pollingInterval);
+      $("btn-generate").disabled = false;
+      hide("generating-spinner");
+      showError("generate-error", "La generación está tardando más de lo esperado. Tu currículum puede estar listo en unos minutos — recarga la página para verificar.");
+      return;
+    }
+
     const res = await apiFetch(`/resume/generation/${generationId}`);
 
     if (!res.success) {
@@ -427,7 +441,7 @@ function startPolling(generationId) {
     } else {
       showErrorHTML("generate-error", _generationErrorMessage(gen.error_code));
     }
-  }, 3000);
+  }, 5000);
 }
 
 function showResultScreen(gen) {

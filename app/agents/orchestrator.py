@@ -18,7 +18,7 @@ from typing import Optional
 from app.agents import tailor_agent, validator_agent, repair_agent
 from app.models.schemas import ValidationResult
 from app.services import docx_service, storage_service
-from app.services.llm_service import GeminiQuotaExhaustedError, GeminiInvalidKeyError
+from app.services.llm_service import GeminiQuotaExhaustedError, GeminiDailyQuotaExhaustedError, GeminiInvalidKeyError
 from app.services.logging_service import LoggingService
 
 logger = logging.getLogger(__name__)
@@ -231,6 +231,16 @@ async def run(
             "has_flagged_sections": has_flagged,
             "flagged_section_count": len(flagged_sections),
         }
+
+    except GeminiDailyQuotaExhaustedError as exc:
+        logger.warning(f"[orchestrator] Daily quota exhausted for generation {generation_id}: {exc}")
+        _mark_failed(supabase_client, generation_id, "failed_quota_daily")
+        await logging_svc.log_user_event(
+            user_id=user_id,
+            event_type="generation_error",
+            metadata={"generation_id": generation_id, "error": "quota_daily"},
+        )
+        raise
 
     except GeminiQuotaExhaustedError as exc:
         logger.warning(f"[orchestrator] Quota exhausted for generation {generation_id}: {exc}")

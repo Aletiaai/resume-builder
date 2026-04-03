@@ -427,6 +427,8 @@ Users must complete a profile step before their first generation. The profile co
 
 **LinkedIn URL as validator cross-reference:** The user's LinkedIn URL is collected during profile completion and stored in `users.resume_linkedin`. A future improvement is to use this URL to cross-reference the user's real job titles, companies, and dates against what the tailor agent generates — adding an additional validation layer beyond comparing against the uploaded base resume. This would require fetching and parsing the LinkedIn profile at generation time, which has rate limiting and authentication considerations to solve first.
 
+**Call budget per generation:** Consider capping the total number of Gemini API calls per resume generation to protect users on the free Gemini tier from quota exhaustion. Suggested cap: 8 calls total (1 tailor + 1 validator + up to 2 repair batches + 1 final validator + buffer). Track call count in the orchestrator and skip remaining repair/validation loops when the budget is reached, delivering with flags instead.
+
 ---
 
 ## Code Conventions
@@ -437,5 +439,5 @@ Users must complete a profile step before their first generation. The profile co
 - Errors are caught at the orchestrator level — agents raise exceptions, orchestrator handles them
 - Write docstrings on all public functions
 - No hardcoded strings in agent prompts — system prompts come from skill files only
-- Generation `status` field values: `processing` | `completed` | `failed` | `failed_quota` | `failed_key` | `failed_timeout`. The polling endpoint normalises all `failed_*` variants to `status: "failed"` before sending to the frontend, and adds a separate `error_code` field.
+- Generation `status` field values: `processing` | `completed` | `failed` | `failed_quota` | `failed_quota_daily` | `failed_key` | `failed_timeout`. The polling endpoint normalises all `failed_*` variants to `status: "failed"` before sending to the frontend, and adds a separate `error_code` field (`quota_exhausted` | `quota_daily` | `invalid_api_key` | `timeout` | `unknown`).
 - Frontend error messages are always in Spanish. Use `showErrorHTML()` (not `showError()`) when the message includes a link.

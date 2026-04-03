@@ -1,6 +1,7 @@
 """Repair Agent — rewrites flagged sections to remove hallucinations.
 
-Calls the resume-tailor skill in repair mode.
+Calls the resume-tailor skill in repair mode, one LLM call per flagged section.
+Batching by section keeps each prompt small and conserves the user's Gemini quota.
 Returns an updated TailoredResume with only the flagged sections corrected.
 """
 
@@ -8,6 +9,7 @@ import json
 import logging
 import re
 
+from collections import defaultdict
 from typing import Optional
 
 from app.models.schemas import (
@@ -15,12 +17,23 @@ from app.models.schemas import (
     TailoredResume,
     ValidationFinding,
 )
-from app.prompts import REPAIR_USER_PROMPT_TEMPLATE
+from app.prompts import REPAIR_SECTION_PROMPT_TEMPLATE
 from app.services import llm_service
 
 logger = logging.getLogger(__name__)
 
 SKILL_NAME = "resume-tailor"
+
+# Maps section names (lowercase) to the TailoredResume field they correspond to.
+# Sections not listed here are repaired by patching the whole resume (fallback).
+_SECTION_FIELD_MAP = {
+    "summary": "summary",
+    "skills": "skills",
+    "experience": "experience",
+    "education": "education",
+    "languages": "languages_line",
+    "languages_line": "languages_line",
+}
 
 
 def _extract_json(text: str) -> str:
@@ -32,6 +45,58 @@ def _extract_json(text: str) -> str:
     return text
 
 
+def _get_section_value(resume: TailoredResume, section: str):
+    """Return the current value of the given section from the resume."""
+    field = _SECTION_FIELD_MAP.get(section.lower())
+    if field:
+        return getattr(resume, field)
+    return None
+
+
+def _apply_section_patch(
+    resume: TailoredResume,
+    section: str,
+    patched_value,
+) -> TailoredResume:
+    """Return a new TailoredResume with one section replaced by patched_value."""
+    field = _SECTION_FIELD_MAP.get(section.lower())
+    if not field:
+        logger.warning(f"[repair_agent] Unknown section '{section}' — skipping patch.")
+        return resume
+
+    data = resume.model_dump()
+
+    if field == "experience":
+        if isinstance(patched_value, list):
+            data["experience"] = patched_value
+        else:
+            logger.warning(f"[repair_agent] Expected list for experience, got {type(patched_value)} — skipping.")
+    else:
+        data[field] = patched_value
+
+    experience = [
+        ExperienceEntry(
+            company=e["company"],
+            title=e["title"],
+            dates=e["dates"],
+            bullets=e["bullets"],
+        )
+        for e in data.get("experience", [])
+    ]
+
+    return TailoredResume(
+        language=data["language"],
+        candidate_name=data["candidate_name"],
+        contact_line=data["contact_line"],
+        summary=data["summary"],
+        skills=data["skills"],
+        experience=experience,
+        education=data["education"],
+        languages_line=data["languages_line"],
+        target_company=data["target_company"],
+    )
+
+
 async def repair(
     findings: list[ValidationFinding],
     original_resume_text: str,
@@ -41,58 +106,70 @@ async def repair(
 ) -> tuple[TailoredResume, dict]:
     """Rewrite only the flagged sections in the tailored resume.
 
+    One LLM call is made per distinct flagged section. Combined usage metadata
+    is returned (summed tokens, summed latency).
+
     Returns:
-        Tuple of (corrected TailoredResume, usage_metadata dict).
+        Tuple of (corrected TailoredResume, combined usage_metadata dict).
     """
-    findings_json = json.dumps(
-        [f.model_dump() for f in findings], indent=2, ensure_ascii=False
-    )
+    # Group findings by section (case-insensitive)
+    by_section: dict[str, list[ValidationFinding]] = defaultdict(list)
+    for finding in findings:
+        by_section[finding.section.lower()].append(finding)
 
-    user_prompt = REPAIR_USER_PROMPT_TEMPLATE.format(
-        original_resume_text=original_resume_text,
-        tailored_resume_json=tailored_resume.model_dump_json(indent=2),
-        findings_json=findings_json,
-    )
+    combined_usage = {"tokens_input": 0, "tokens_output": 0, "latency_ms": 0}
+    current_resume = tailored_resume
 
-    raw_text, usage = await llm_service.call(
-        agent_name="repair_agent",
-        user_prompt=user_prompt,
-        gemini_api_key=gemini_api_key,
-        skill_name=SKILL_NAME,
-        language=language,
-    )
+    for section, section_findings in by_section.items():
+        section_value = _get_section_value(current_resume, section)
+        if section_value is None:
+            logger.warning(f"[repair_agent] Section '{section}' not found in resume model — skipping.")
+            continue
 
-    json_str = _extract_json(raw_text)
-    try:
-        data = json.loads(json_str)
-    except json.JSONDecodeError as exc:
-        logger.error(
-            f"[repair_agent] Failed to parse JSON response: {exc} | "
-            f"First 500 chars: {raw_text[:500]!r}"
+        findings_json = json.dumps(
+            [f.model_dump() for f in section_findings], indent=2, ensure_ascii=False
         )
-        raise RuntimeError("El modelo devolvió una respuesta con formato inválido.") from exc
+        section_json = json.dumps(section_value, indent=2, ensure_ascii=False)
 
-    experience = [
-        ExperienceEntry(
-            company=e["company"],
-            title=e["title"],
-            dates=e["dates"],
-            bullets=e["bullets"],
+        user_prompt = REPAIR_SECTION_PROMPT_TEMPLATE.format(
+            section_name=section,
+            original_resume_text=original_resume_text,
+            section_json=section_json,
+            findings_json=findings_json,
         )
-        for e in (data.get("experience") or tailored_resume.model_dump()["experience"])
-    ]
 
-    repaired = TailoredResume(
-        language=data.get("language") or tailored_resume.language,
-        candidate_name=data.get("candidate_name") or tailored_resume.candidate_name,
-        contact_line=data.get("contact_line") or tailored_resume.contact_line,
-        summary=data.get("summary") or tailored_resume.summary,
-        skills=data.get("skills") or tailored_resume.skills,
-        experience=experience,
-        education=data.get("education") or tailored_resume.education,
-        languages_line=data.get("languages_line") or tailored_resume.languages_line,
-        target_company=data.get("target_company") or tailored_resume.target_company,
+        raw_text, usage = await llm_service.call(
+            agent_name=f"repair_agent[{section}]",
+            user_prompt=user_prompt,
+            gemini_api_key=gemini_api_key,
+            skill_name=SKILL_NAME,
+            language=language,
+        )
+
+        # Accumulate usage
+        combined_usage["tokens_input"] += usage.get("tokens_input") or 0
+        combined_usage["tokens_output"] += usage.get("tokens_output") or 0
+        combined_usage["latency_ms"] += usage.get("latency_ms") or 0
+
+        json_str = _extract_json(raw_text)
+        try:
+            patched_value = json.loads(json_str)
+        except json.JSONDecodeError as exc:
+            logger.error(
+                f"[repair_agent] Failed to parse response for section '{section}': {exc} | "
+                f"First 500 chars: {raw_text[:500]!r}"
+            )
+            # Skip this section — leave the original value in place
+            continue
+
+        current_resume = _apply_section_patch(current_resume, section, patched_value)
+        logger.info(
+            f"[repair_agent] Repaired section '{section}' "
+            f"({len(section_findings)} finding(s))."
+        )
+
+    logger.info(
+        f"[repair_agent] Done — {len(by_section)} section(s) repaired, "
+        f"{len(findings)} total finding(s)."
     )
-
-    logger.info(f"[repair_agent] Repaired {len(findings)} finding(s).")
-    return repaired, usage
+    return current_resume, combined_usage

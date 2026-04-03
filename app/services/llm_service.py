@@ -21,11 +21,23 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 
 class GeminiQuotaExhaustedError(Exception):
-    """Raised when the user's Gemini daily quota is exhausted."""
+    """Raised when per-minute rate limit retries are exhausted."""
+
+
+class GeminiDailyQuotaExhaustedError(Exception):
+    """Raised immediately when the Gemini daily quota is confirmed exhausted.
+
+    Detected via the 'PerDay' violation string in the error message
+    (GenerateRequestsPerDayPerProjectPerModel). No retry is possible.
+    """
 
 
 class GeminiInvalidKeyError(Exception):
     """Raised when the Gemini API key is invalid or revoked."""
+
+
+# Substring that identifies a daily-quota violation in Gemini 429 error messages
+_DAILY_QUOTA_MARKER = "PerDay"
 
 from app.services import skill_service
 
@@ -97,6 +109,8 @@ async def call(
         except (InvalidArgument, PermissionDenied, Unauthenticated) as e:
             raise GeminiInvalidKeyError(str(e)) from e
         except ResourceExhausted as e:
+            if _DAILY_QUOTA_MARKER in str(e):
+                raise GeminiDailyQuotaExhaustedError(str(e)) from e
             if attempt == _MAX_RETRIES:
                 raise GeminiQuotaExhaustedError(str(e)) from e
             match = _RETRY_DELAY_RE.search(str(e))

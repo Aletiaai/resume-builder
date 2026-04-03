@@ -235,6 +235,7 @@ async def get_generation_status(
     # Map internal failure status codes to a clean error_code for the frontend.
     _status_to_error = {
         "failed_quota": "quota_exhausted",
+        "failed_quota_daily": "quota_daily",
         "failed_key": "invalid_api_key",
         "failed_timeout": "timeout",
         "failed": "unknown",

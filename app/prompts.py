@@ -102,6 +102,28 @@ Only change the flagged content — preserve everything else exactly.
 No prose before or after the JSON.
 """
 
+REPAIR_SECTION_PROMPT_TEMPLATE = """
+You are activating the resume-tailor skill in repair mode.
+
+## Task
+Rewrite ONLY the "{section_name}" section of the tailored resume.
+Ground every correction strictly in the original resume text.
+Do not modify any other section.
+
+## Original Resume (source of truth)
+{original_resume_text}
+
+## Current "{section_name}" Section (to repair)
+{section_json}
+
+## Flagged Findings in This Section
+{findings_json}
+
+## Output Instructions
+Return ONLY the corrected "{section_name}" section as a JSON value — no surrounding object,
+no prose, no explanation. The value must be the same type as the current section (string, list, etc.).
+"""
+
 # ---------------------------------------------------------------------------
 # Gemini API key validation (lightweight test prompt)
 # ---------------------------------------------------------------------------
