@@ -169,7 +169,7 @@ CREATE INDEX idx_users_ls ON users(lemon_squeezy_customer_id);
 CREATE TABLE generations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    -- status values: processing | completed | failed | failed_quota | failed_key | failed_timeout
+    -- status values: processing | completed | failed | failed_quota | failed_quota_daily | failed_key | failed_timeout
     status TEXT NOT NULL DEFAULT 'processing',
     job_description TEXT NOT NULL,
     language_detected TEXT CHECK (language_detected IN ('en','es')),
@@ -334,7 +334,7 @@ All endpoints return a standard envelope:
 |--------|------|-------------|
 | `POST` | `/resume/upload` | Upload a `.docx` base resume to Supabase Storage. |
 | `POST` | `/resume/generate` | Start resume generation. Returns `generation_id` immediately; work runs in background. Optional `target_company` field in body pre-fills the company name for the output filename. |
-| `GET` | `/resume/generation/{id}` | Poll for generation status. Returns signed download URL when complete. On failure, includes `error_code`: `quota_exhausted` \| `invalid_api_key` \| `timeout` \| `unknown`. |
+| `GET` | `/resume/generation/{id}` | Poll for generation status. Returns signed download URL when complete. On failure, includes `error_code`: `quota_daily` \| `quota_exhausted` \| `invalid_api_key` \| `timeout` \| `unknown`. |
 
 ### Billing
 
@@ -401,23 +401,32 @@ POST /resume/generate
 
 **Skill files** are read from disk and injected directly into the prompt on every call — no Gemini Files API, no caching, no expiry. `skill_service.get_skill_content()` concatenates `SKILL.md` + `references/section-rules.md` (always) + `references/spanish-format.md` (Spanish only). `references/formatting.md` is not injected — it is implemented in code in `docx_service.py`.
 
-**Rate limit handling:** `llm_service.call()` retries up to 3 times on 429, waiting the delay suggested in the Gemini error message before each retry. After all retries are exhausted, raises `GeminiQuotaExhaustedError`.
+**Rate limit handling:** `llm_service.call()` retries up to 3 times on `ResourceExhausted` (429). Before retrying it checks the error message for `"PerDay"` — if found, it raises `GeminiDailyQuotaExhaustedError` immediately (no retry possible). For per-minute limits it waits the suggested delay from the error message, falling back to exponential backoff. After all retries are exhausted, raises `GeminiQuotaExhaustedError`.
 
 **API key errors:** `InvalidArgument`, `PermissionDenied`, and `Unauthenticated` from the Google API are caught immediately (no retry) and raise `GeminiInvalidKeyError`.
 
-**Error classification in the orchestrator:** typed exceptions set specific status codes on the generation record (`failed_quota`, `failed_key`, `failed_timeout`, `failed`). The polling endpoint maps these to an `error_code` field and returns `status: "failed"` in all failure cases so the frontend only checks one value.
+**Error classification in the orchestrator:** typed exceptions set specific status codes on the generation record (`failed_quota_daily`, `failed_quota`, `failed_key`, `failed_timeout`, `failed`). The polling endpoint maps these to an `error_code` field and returns `status: "failed"` in all failure cases so the frontend only checks one value.
 
 **Generation timeout:** the background task wrapper enforces a 5-minute (`300s`) hard timeout using `asyncio.wait_for`. Timeout sets status to `failed_timeout`.
 
 **Frontend error messages** (Spanish, shown in-place):
 | `error_code` | Message shown |
 |---|---|
-| `quota_exhausted` | Daily limit reached, resets at midnight Pacific |
+| `quota_daily` | Daily quota reached — resets at midnight Pacific |
+| `quota_exhausted` | Per-minute rate limit hit — wait and retry |
 | `invalid_api_key` | Key invalid/revoked + link to settings screen |
 | `timeout` | Took too long, try again |
 | `unknown` | Generic fallback |
 
-**Validation failure handling:** if a section fails all 3 validation attempts, it is highlighted in red in the DOCX and a Spanish comment is added: *"No pudimos verificar este contenido en tu currículum original. Revísalo antes de enviarlo."* The user is shown a warning banner in the UI listing the number of flagged sections.
+**Frontend polling:** 5-second interval, 10-minute ceiling (120 polls), 60-second consecutive-failure window (12 failures). An `isPollPending` guard prevents overlapping requests. The failure counter resets on every successful response regardless of generation status. Completed and failed statuses each have their own explicit handler — the spinner stops immediately on either.
+
+**Repair agent batching:** the repair agent makes one LLM call per distinct flagged section rather than one call for all findings. This keeps each prompt small and conserves the user's Gemini quota. Combined token usage is summed and returned.
+
+**Tailor agent JSON robustness:** `_clean_json()` strips markdown fences, extracts the outermost `{…}` block, and removes trailing commas before parsing. If parsing still fails, the LLM call is retried once before raising an error.
+
+**Validation failure highlighting — granular:** `generate_docx()` receives `flagged_findings: list[dict]` (each with `section` + `flagged_text`). For experience, individual job title lines and bullets are matched against flagged texts; only matching elements are highlighted red. The section header and unflagged items in the same job entry remain unstyled. Skills category names formatted as `**Category**:` are rendered as bold runs in the DOCX.
+
+The user is shown a warning banner listing the number of flagged *sections* (not individual findings): *"No pudimos verificar N sección(es) de tu currículum. Están marcadas en rojo en el documento."*
 
 ---
 

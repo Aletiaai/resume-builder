@@ -43,7 +43,7 @@ from app.services import skill_service
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME ="gemini-3-flash-preview" #"gemini-2.5-flash" 
 
 _MAX_RETRIES = 3
 # Matches "Please retry in 28.63s" from Gemini 429 error messages
